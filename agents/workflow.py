@@ -1,13 +1,8 @@
-"""
-Parity analysis workflow definition.
-
-Builds and returns the Microsoft Agent Framework agent that runs the
-full Azure Cloud Feature Parity pipeline as a linear executor chain.
-"""
+"""Parity analysis workflow definition."""
 
 from __future__ import annotations
 
-from agent_framework import WorkflowBuilder, WorkflowAgent
+from agent_framework import WorkflowBuilder, WorkflowAgent, Workflow
 
 from agents.executors import (
     ComparisonExecutor,
@@ -21,17 +16,11 @@ from agents.workflow_state import ParityWorkflowState
 from storage.feature_store import FeatureStore
 
 
-def build_parity_agent() -> WorkflowAgent:
+def build_parity_workflow() -> Workflow:
     """
-    Construct the parity analysis agent from the workflow pipeline.
-
-    Pipeline:
-        ParityStarterExecutor  (receives user ChatMessage)
-            → LearnScraperExecutor
-            → WebScraperExecutor
-            → FeatureExtractorExecutor
-            → ComparisonExecutor
-            → ReportExecutor        (emits AgentRunUpdateEvent)
+    Factory that returns a fresh Workflow each call.
+    Used by from_agent_framework() as a per-request factory:
+        AgentFrameworkWorkflowAdapter._build_agent() calls factory().as_agent()
     """
     store = FeatureStore()
 
@@ -42,11 +31,15 @@ def build_parity_agent() -> WorkflowAgent:
     comparison = ComparisonExecutor()
     reporter = ReportExecutor(store=store)
 
-    agent: WorkflowAgent = (
+    workflow: Workflow = (
         WorkflowBuilder()
         .add_chain([starter, learn_scraper, web_scraper, extractor, comparison, reporter])
         .set_start_executor(starter)
         .build()
-        .as_agent()
     )
-    return agent
+    return workflow
+
+
+def build_parity_agent() -> WorkflowAgent:
+    """Convenience wrapper for CLI mode — returns a WorkflowAgent."""
+    return build_parity_workflow().as_agent()

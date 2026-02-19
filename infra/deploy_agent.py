@@ -70,9 +70,11 @@ def deploy(image: str) -> None:
             image=image,
             environment_variables={
                 "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,
+                "AZURE_AI_PROJECT_ENDPOINT": PROJECT_ENDPOINT,  # expected by hosting adapter
                 "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", ""),
                 "AZURE_OPENAI_DEPLOYMENT": MODEL_NAME,
                 "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
+                "AGENT_DEBUG_ERRORS": "true",  # expose full errors in responses
             },
         ),
     )

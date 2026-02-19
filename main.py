@@ -23,7 +23,7 @@ from loguru import logger
 load_dotenv(override=True)
 
 from config.settings import settings  # noqa: E402 – must be after load_dotenv
-from agents.workflow import build_parity_agent  # noqa: E402
+from agents.workflow import build_parity_workflow, build_parity_agent  # noqa: E402
 
 
 def _configure_logging() -> None:
@@ -64,9 +64,11 @@ async def _run_server() -> None:
     """Start the HTTP server backed by the parity agent."""
     from azure.ai.agentserver.agentframework import from_agent_framework
 
-    agent = build_parity_agent()
+    # Pass build_parity_workflow as a factory (not a pre-built agent).
+    # AgentFrameworkWorkflowAdapter._build_agent() calls factory().as_agent()
+    # to create a fresh WorkflowAgent per conversation request.
     logger.info("Starting Azure Cloud Parity Bot HTTP server...")
-    await from_agent_framework(agent).run_async()
+    await from_agent_framework(build_parity_workflow).run_async()
 
 
 def main() -> None:
