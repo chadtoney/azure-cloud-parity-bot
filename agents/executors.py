@@ -210,31 +210,51 @@ class FeatureExtractorExecutor(Executor):
     @handler
     async def extract_features(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
         pages: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
+        query: str = await ctx.get_shared_state(KEY_QUERY) or "Azure cloud feature parity"
+
+        if pages:
+            status_msg = f"🤖 Extracting feature records from {len(pages)} pages..."
+        else:
+            status_msg = "⚠️ Live scraping unavailable (network restricted). Using LLM knowledge base instead..."
+
         await ctx.add_event(
             AgentRunUpdateEvent(
                 self.id,
                 data=AgentRunResponseUpdate(
-                    contents=[TextContent(text=f"🤖 Extracting feature records from {len(pages)} pages (this may take a minute)...")],
+                    contents=[TextContent(text=status_msg)],
                     role=Role.ASSISTANT,
                     response_id=str(uuid4()),
                 ),
             )
         )
-        records = await self._agent.run(pages)
+
+        if pages:
+            records = await self._agent.run(pages)
+        else:
+            records = []
 
         if records:
             self._store.upsert_many(records)
         else:
+            # Try feature store first (cached from a previous run)
             records = self._store.get_all()
-            logger.warning(f"FeatureExtractorExecutor: no new records; loaded {len(records)} from store.")
+            if records:
+                logger.info(f"FeatureExtractorExecutor: loaded {len(records)} records from store.")
+            else:
+                # Cold start + no scraping: generate from LLM knowledge
+                logger.warning("FeatureExtractorExecutor: store empty – generating from LLM knowledge.")
+                records = await self._agent.run_from_knowledge(query)
+                if records:
+                    self._store.upsert_many(records)
 
         await ctx.set_shared_state(KEY_FEATURE_RECORDS, records)
         logger.info(f"FeatureExtractorExecutor: {len(records)} records.")
+        source_note = "scraped docs" if pages else "LLM knowledge"
         await ctx.add_event(
             AgentRunUpdateEvent(
                 self.id,
                 data=AgentRunResponseUpdate(
-                    contents=[TextContent(text=f"✅ Extracted {len(records)} feature records. Building comparison...")],
+                    contents=[TextContent(text=f"✅ {len(records)} feature records ready (from {source_note}). Building comparison...")],
                     role=Role.ASSISTANT,
                     response_id=str(uuid4()),
                 ),

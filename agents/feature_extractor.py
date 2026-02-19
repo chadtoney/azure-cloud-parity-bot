@@ -50,6 +50,27 @@ Return ONLY valid JSON – an array of objects. No markdown, no explanation.
 If you cannot find any feature records, return an empty array [].
 """
 
+# Used when live scraping is unavailable – the LLM generates records from training knowledge.
+KNOWLEDGE_SYSTEM_PROMPT = """\
+You are an expert on Azure cloud feature availability across different Azure cloud environments.
+Using your training knowledge, generate a JSON array of feature availability records for the
+requested Azure service (or the most common Azure services if no specific service is named).
+
+Each record must have:
+  - service_name: Azure service name (string)
+  - feature_name: Specific feature or capability (string)
+  - category: Service category such as Compute, Networking, Storage, AI, Security, etc. (string)
+  - description: Brief description (string or null)
+  - status: an object mapping cloud environment keys to status values
+    Cloud environment keys: commercial, gcc, gcc_high, dod_il2, dod_il4, dod_il5, china, germany
+    Status values: "ga", "preview", "not_available", "unknown"
+  - source_url: use "https://learn.microsoft.com/en-us/azure/azure-government/documentation-government-services"
+  - notes: any caveats or extra info (string or null)
+
+Be as accurate as possible based on your training knowledge. Return at least 10 records.
+Return ONLY valid JSON – an array of objects. No markdown, no explanation.
+"""
+
 
 class FeatureExtractorAgent:
     """
@@ -95,6 +116,37 @@ class FeatureExtractorAgent:
 
         logger.success(f"FeatureExtractorAgent: total {len(all_records)} records extracted.")
         return all_records
+
+    async def run_from_knowledge(self, query: str) -> List[FeatureRecord]:
+        """
+        Generate FeatureRecord objects directly from the LLM's training knowledge.
+
+        Used as a fallback when live scraping is unavailable (e.g. outbound network
+        is blocked inside a Foundry hosted-agent container).
+        """
+        if not self._llm:
+            logger.warning("FeatureExtractorAgent.run_from_knowledge: no LLM configured, returning [].")
+            return []
+
+        logger.info(f"FeatureExtractorAgent: generating records from LLM knowledge for query='{query}'")
+        fallback_url = "https://learn.microsoft.com/en-us/azure/azure-government/documentation-government-services"
+        try:
+            response = await self._llm.chat.completions.create(
+                model=settings.azure_openai_deployment,
+                messages=[
+                    {"role": "system", "content": KNOWLEDGE_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"Query: {query}"},
+                ],
+                temperature=0.0,
+                max_tokens=4096,
+            )
+            raw_json = response.choices[0].message.content or "[]"
+            records = self._parse_llm_response(raw_json, fallback_url)
+            logger.success(f"FeatureExtractorAgent: generated {len(records)} records from knowledge.")
+            return records
+        except Exception as exc:
+            logger.error(f"FeatureExtractorAgent.run_from_knowledge failed: {exc}")
+            return []
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 

@@ -26,7 +26,8 @@ class WebContentClient:
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     }
 
-    def __init__(self, timeout: int = 30) -> None:
+    # Tight timeout so a dead network fails fast (8 s per request)
+    def __init__(self, timeout: int = 8) -> None:
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -61,13 +62,15 @@ class WebContentClient:
 
     async def fetch_many(self, urls: List[str]) -> Dict[str, str]:
         """Fetch multiple URLs concurrently, returning a map of url → html."""
-        results: Dict[str, str] = {}
-        for url in urls:
-            html = await self.fetch(url)
-            if html:
-                results[url] = html
-            await asyncio.sleep(settings.scrape_delay_seconds)
-        return results
+        htmls = await asyncio.gather(
+            *[self.fetch(url) for url in urls],
+            return_exceptions=True,
+        )
+        return {
+            url: html
+            for url, html in zip(urls, htmls)
+            if isinstance(html, str) and html
+        }
 
     async def fetch_azure_updates(self) -> str:
         """Fetch the Azure Updates blog/feed."""

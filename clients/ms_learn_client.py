@@ -44,7 +44,8 @@ class MicrosoftLearnMCPClient:
         "https://learn.microsoft.com/en-us/azure/china/resources-azure-china-general-faq",
     ]
 
-    def __init__(self, timeout: int = 30) -> None:
+    # Tight timeout so a dead network fails fast (8 s per request)
+    def __init__(self, timeout: int = 8) -> None:
         self._timeout = timeout
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -76,25 +77,28 @@ class MicrosoftLearnMCPClient:
             return ""
 
     async def fetch_government_parity_pages(self) -> Dict[str, str]:
-        """Fetch all Azure Government parity documentation pages."""
-        tasks = {url: self.fetch_page(url) for url in self.GOVERNMENT_PARITY_URLS}
-        results: Dict[str, str] = {}
-        for url, coro in tasks.items():
-            html = await coro
-            if html:
-                results[url] = html
-            await asyncio.sleep(settings.scrape_delay_seconds)
-        return results
+        """Fetch all Azure Government parity documentation pages concurrently."""
+        htmls = await asyncio.gather(
+            *[self.fetch_page(url) for url in self.GOVERNMENT_PARITY_URLS],
+            return_exceptions=True,
+        )
+        return {
+            url: html
+            for url, html in zip(self.GOVERNMENT_PARITY_URLS, htmls)
+            if isinstance(html, str) and html
+        }
 
     async def fetch_china_parity_pages(self) -> Dict[str, str]:
-        """Fetch Azure China parity documentation pages."""
-        results: Dict[str, str] = {}
-        for url in self.CHINA_PARITY_URLS:
-            html = await self.fetch_page(url)
-            if html:
-                results[url] = html
-            await asyncio.sleep(settings.scrape_delay_seconds)
-        return results
+        """Fetch Azure China parity documentation pages concurrently."""
+        htmls = await asyncio.gather(
+            *[self.fetch_page(url) for url in self.CHINA_PARITY_URLS],
+            return_exceptions=True,
+        )
+        return {
+            url: html
+            for url, html in zip(self.CHINA_PARITY_URLS, htmls)
+            if isinstance(html, str) and html
+        }
 
     async def search_docs(self, query: str, max_results: int = 10) -> List[Dict[str, str]]:
         """
