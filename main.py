@@ -42,7 +42,7 @@ def _configure_logging() -> None:
 
 async def _run_cli(query: str) -> None:
     """Run the parity pipeline once via CLI and print the Markdown report."""
-    from agent_framework.messages import ChatMessage, TextContent, Role
+    from agent_framework import ChatMessage, TextContent, Role
 
     agent = build_parity_agent()
     messages = [

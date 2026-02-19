@@ -61,8 +61,8 @@ class ParityStarterExecutor(Executor):
     async def start(
         self,
         messages: list[ChatMessage],
-        ctx: WorkflowContext,
-    ) -> dict:
+        ctx: WorkflowContext[dict],
+    ) -> None:
         user_text = " ".join(
             part.text
             for msg in messages
@@ -70,9 +70,9 @@ class ParityStarterExecutor(Executor):
             if hasattr(part, "text")
         ).strip() or "Run full parity analysis"
 
-        ctx.set_shared_state(KEY_QUERY, user_text)
-        ctx.set_shared_state(KEY_SCRAPED_PAGES, {})
-        ctx.set_shared_state(KEY_EXTRA_URLS, [])
+        await ctx.set_shared_state(KEY_QUERY, user_text)
+        await ctx.set_shared_state(KEY_SCRAPED_PAGES, {})
+        await ctx.set_shared_state(KEY_EXTRA_URLS, [])
 
         service_match = re.search(
             r"(?:for|check|analyze|scan)\s+([A-Za-z][A-Za-z0-9\s\-]+?)(?:\s+service|\s+features?|$)",
@@ -80,13 +80,13 @@ class ParityStarterExecutor(Executor):
             re.IGNORECASE,
         )
         target = service_match.group(1).strip() if service_match else None
-        ctx.set_shared_state(KEY_TARGET_SERVICE, target)
+        await ctx.set_shared_state(KEY_TARGET_SERVICE, target)
 
         if target:
             logger.info(f"StarterExecutor: targeted service = '{target}'")
         else:
             logger.info("StarterExecutor: full parity scan requested")
-        return {}
+        await ctx.send_message({})
 
 
 # ---------------------------------------------------------------------------
@@ -101,9 +101,9 @@ class LearnScraperExecutor(Executor):
         self._agent = LearnScraperAgent()
 
     @handler
-    async def scrape_learn(self, _prev: dict, ctx: WorkflowContext) -> dict:
-        target = ctx.get_shared_state(KEY_TARGET_SERVICE)
-        extra_urls: list = ctx.get_shared_state(KEY_EXTRA_URLS) or []
+    async def scrape_learn(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        target = await ctx.get_shared_state(KEY_TARGET_SERVICE)
+        extra_urls: list = await ctx.get_shared_state(KEY_EXTRA_URLS) or []
 
         if target:
             results = await self._agent.search(
@@ -113,13 +113,13 @@ class LearnScraperExecutor(Executor):
                 url = r.get("url", "")
                 if url:
                     extra_urls.append(url)
-            ctx.set_shared_state(KEY_EXTRA_URLS, extra_urls)
+            await ctx.set_shared_state(KEY_EXTRA_URLS, extra_urls)
 
         pages = await self._agent.run()
-        existing: dict = ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
-        ctx.set_shared_state(KEY_SCRAPED_PAGES, {**existing, **pages})
+        existing: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
+        await ctx.set_shared_state(KEY_SCRAPED_PAGES, {**existing, **pages})
         logger.info(f"LearnScraperExecutor: fetched {len(pages)} pages.")
-        return {}
+        await ctx.send_message({})
 
 
 # ---------------------------------------------------------------------------
@@ -134,13 +134,13 @@ class WebScraperExecutor(Executor):
         self._agent = WebScraperAgent()
 
     @handler
-    async def scrape_web(self, _prev: dict, ctx: WorkflowContext) -> dict:
-        extra_urls: list = ctx.get_shared_state(KEY_EXTRA_URLS) or []
+    async def scrape_web(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        extra_urls: list = await ctx.get_shared_state(KEY_EXTRA_URLS) or []
         pages = await self._agent.run(extra_urls=extra_urls or None)
-        existing: dict = ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
-        ctx.set_shared_state(KEY_SCRAPED_PAGES, {**existing, **pages})
+        existing: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
+        await ctx.set_shared_state(KEY_SCRAPED_PAGES, {**existing, **pages})
         logger.info(f"WebScraperExecutor: +{len(pages)} pages.")
-        return {}
+        await ctx.send_message({})
 
 
 # ---------------------------------------------------------------------------
@@ -156,8 +156,8 @@ class FeatureExtractorExecutor(Executor):
         self._store = store or FeatureStore()
 
     @handler
-    async def extract_features(self, _prev: dict, ctx: WorkflowContext) -> dict:
-        pages: dict = ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
+    async def extract_features(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        pages: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
         records = await self._agent.run(pages)
 
         if records:
@@ -166,9 +166,9 @@ class FeatureExtractorExecutor(Executor):
             records = self._store.get_all()
             logger.warning(f"FeatureExtractorExecutor: no new records; loaded {len(records)} from store.")
 
-        ctx.set_shared_state(KEY_FEATURE_RECORDS, records)
+        await ctx.set_shared_state(KEY_FEATURE_RECORDS, records)
         logger.info(f"FeatureExtractorExecutor: {len(records)} records.")
-        return {}
+        await ctx.send_message({})
 
 
 # ---------------------------------------------------------------------------
@@ -183,12 +183,12 @@ class ComparisonExecutor(Executor):
         self._agent = ComparisonAgent()
 
     @handler
-    async def compare(self, _prev: dict, ctx: WorkflowContext) -> dict:
-        records = ctx.get_shared_state(KEY_FEATURE_RECORDS) or []
+    async def compare(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        records = await ctx.get_shared_state(KEY_FEATURE_RECORDS) or []
         report = self._agent.run(records, baseline=CloudEnvironment.COMMERCIAL)
-        ctx.set_shared_state(KEY_REPORT, report)
+        await ctx.set_shared_state(KEY_REPORT, report)
         logger.info("ComparisonExecutor: report built.")
-        return {}
+        await ctx.send_message({})
 
 
 # ---------------------------------------------------------------------------
@@ -204,14 +204,14 @@ class ReportExecutor(Executor):
 
     @handler
     async def generate_report(self, _prev: dict, ctx: WorkflowContext) -> None:
-        report = ctx.get_shared_state(KEY_REPORT)
+        report = await ctx.get_shared_state(KEY_REPORT)
 
         if not report:
             markdown = "No feature data available. Please retry after configuring Azure OpenAI credentials."
         else:
             markdown = await self._agent.run(report)
 
-        ctx.set_shared_state(KEY_MARKDOWN, markdown)
+        await ctx.set_shared_state(KEY_MARKDOWN, markdown)
 
         await ctx.add_event(
             AgentRunUpdateEvent(
