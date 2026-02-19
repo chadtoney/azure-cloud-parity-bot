@@ -31,6 +31,7 @@ from loguru import logger
 
 from agents.comparison_agent import ComparisonAgent
 from agents.feature_extractor import FeatureExtractorAgent
+from agents.future_features_agent import FutureFeaturesAgent
 from agents.learn_scraper import LearnScraperAgent
 from agents.report_generator import ReportGeneratorAgent
 from agents.web_scraper import WebScraperAgent
@@ -192,7 +193,33 @@ class ComparisonExecutor(Executor):
 
 
 # ---------------------------------------------------------------------------
-# 6. Report executor – final step; emits the result to the HTTP response
+# 6. Future features executor
+# ---------------------------------------------------------------------------
+
+class FutureFeaturesExecutor(Executor):
+    """Generates future feature suggestions and an optional LLM roadmap narrative."""
+
+    def __init__(self) -> None:
+        super().__init__(id="future_features")
+        self._agent = FutureFeaturesAgent()
+
+    @handler
+    async def suggest_future_features(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        report = await ctx.get_shared_state(KEY_REPORT)
+        records = await ctx.get_shared_state(KEY_FEATURE_RECORDS) or []
+
+        if report:
+            report = await self._agent.run(report, records)
+            await ctx.set_shared_state(KEY_REPORT, report)
+            logger.info(f"FutureFeaturesExecutor: {len(report.future_suggestions)} suggestions added.")
+        else:
+            logger.warning("FutureFeaturesExecutor: no report in state; skipping.")
+
+        await ctx.send_message({})
+
+
+# ---------------------------------------------------------------------------
+# 7. Report executor – final step; emits the result to the HTTP response
 # ---------------------------------------------------------------------------
 
 class ReportExecutor(Executor):

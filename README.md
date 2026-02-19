@@ -36,6 +36,9 @@ FeatureExtractorExecutor ← LLM-powered HTML → FeatureRecord extraction
 ComparisonExecutor       ← builds cross-cloud parity comparisons
       │
       ▼
+FutureFeaturesExecutor   ← suggests upcoming feature advancements per cloud
+      │
+      ▼
 ReportExecutor           ← generates Markdown report + HTTP response
 ```
 
@@ -119,6 +122,27 @@ Use the **Run and Debug** panel and select:
 - **Reports**: `reports/parity_report_<timestamp>.json` + `.md`
 - **Logs**: `logs/parity-bot.log`
 
+Each generated Markdown report includes:
+
+| Section | Description |
+|---------|-------------|
+| Parity Summary by Cloud | Table showing parity %, GA count, Preview count, Not Available count per cloud |
+| Detailed Gaps by Cloud | Lists of features GA in Commercial but missing in each sovereign cloud |
+| **Future Features & Roadmap** | Suggested upcoming advancements grouped by cloud and confidence level |
+| Executive Summary *(LLM optional)* | Plain-English narrative summarising gaps, previews, and roadmap |
+
+### Future Features & Roadmap
+
+The `FutureFeaturesAgent` analyses the parity data to surface forward-looking suggestions:
+
+| Confidence | Criteria | Estimated Timeline |
+|------------|----------|--------------------|
+| **High** | Feature is in Preview in the target cloud | 6–12 months |
+| **Medium** | Feature is planned / announced | varies |
+| **Low** | Feature status undocumented in target cloud | 12–18 months |
+
+When Azure OpenAI credentials are configured, the agent also generates a plain-English **roadmap narrative** powered by the LLM.
+
 ## Project Structure
 
 ```
@@ -129,6 +153,7 @@ Use the **Run and Debug** panel and select:
 │   ├── workflow_state.py    # Shared state dataclass (reference)
 │   ├── comparison_agent.py  # Cross-cloud comparison logic
 │   ├── feature_extractor.py # LLM + heuristic HTML extraction
+│   ├── future_features_agent.py  # Future feature suggestion + roadmap narrative
 │   ├── learn_scraper.py     # Microsoft Learn scraper
 │   ├── orchestrator.py      # Standalone orchestrator (non-framework mode)
 │   ├── report_generator.py  # Markdown report + LLM summary
