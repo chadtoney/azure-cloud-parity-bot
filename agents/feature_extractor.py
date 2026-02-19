@@ -148,6 +148,52 @@ class FeatureExtractorAgent:
             logger.error(f"FeatureExtractorAgent.run_from_knowledge failed: {exc}")
             return []
 
+    async def run_direct_report(self, query: str) -> str:
+        """
+        Generate a complete formatted parity report in a SINGLE LLM call.
+
+        Skips JSON extraction, Pydantic parsing, comparison loops, and the
+        second LLM summary call in ReportGeneratorAgent. Use this in
+        SKIP_SCRAPING mode where every millisecond counts.
+
+        Returns:
+            Full Markdown report string, or empty string on failure.
+        """
+        if not self._llm:
+            logger.warning("FeatureExtractorAgent.run_direct_report: no LLM configured.")
+            return ""
+
+        logger.info(f"FeatureExtractorAgent: generating direct report for query='{query}'")
+        system_prompt = """\
+You are an expert Azure cloud architect. Using your training knowledge, produce a complete
+Azure cloud feature parity report in Markdown for the user's query.
+
+The report must include:
+1. A brief executive summary (2-3 sentences)
+2. A Markdown table with columns: Feature | Commercial | GCC | GCC-High | DoD IL2 | DoD IL4 | DoD IL5 | China
+   - Use: GA / Preview / Not Available / Unknown for each cell
+3. Key gaps and recommendations (3-5 bullet points)
+
+Be specific and accurate. Focus on features relevant to the query.
+Return ONLY Markdown — no preamble, no code fences.
+"""
+        try:
+            response = await self._llm.chat.completions.create(
+                model=settings.azure_openai_deployment,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": query},
+                ],
+                temperature=0.0,
+                max_tokens=2000,
+            )
+            report_md = response.choices[0].message.content or ""
+            logger.success("FeatureExtractorAgent: direct report generated.")
+            return report_md
+        except Exception as exc:
+            logger.error(f"FeatureExtractorAgent.run_direct_report failed: {exc}")
+            return ""
+
     # ── LLM extraction ────────────────────────────────────────────────────────
 
     async def _extract_with_llm(self, url: str, html: str) -> List[FeatureRecord]:

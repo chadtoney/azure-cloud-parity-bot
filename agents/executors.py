@@ -233,6 +233,30 @@ class FeatureExtractorExecutor(Executor):
         pages: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
         query: str = await ctx.get_shared_state(KEY_QUERY) or "Azure cloud feature parity"
 
+        if settings.skip_scraping:
+            # Fast path: single LLM call generates the complete report directly.
+            # Bypasses JSON extraction, Pydantic parsing, comparison loops, and
+            # the second LLM call in ReportGeneratorAgent.
+            await ctx.add_event(
+                AgentRunUpdateEvent(
+                    self.id,
+                    data=AgentRunResponseUpdate(
+                        contents=[TextContent(text="🤖 Generating parity report from Azure knowledge base...")],
+                        role=Role.ASSISTANT,
+                        response_id=str(uuid4()),
+                    ),
+                )
+            )
+            report_md = await self._agent.run_direct_report(query)
+            if report_md:
+                await ctx.set_shared_state(KEY_MARKDOWN, report_md)
+                await ctx.set_shared_state(KEY_FEATURE_RECORDS, [])
+                logger.success("FeatureExtractorExecutor: direct report ready (1 LLM call).")
+            else:
+                await ctx.set_shared_state(KEY_FEATURE_RECORDS, [])
+            await ctx.send_message({})
+            return
+
         if pages:
             status_msg = f"🤖 Extracting feature records from {len(pages)} pages..."
         else:
@@ -297,6 +321,12 @@ class ComparisonExecutor(Executor):
 
     @handler
     async def compare(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        # Skip if the fast-path already produced a final report
+        if await ctx.get_shared_state(KEY_MARKDOWN):
+            logger.info("ComparisonExecutor: direct report already built, skipping.")
+            await ctx.send_message({})
+            return
+
         records = await ctx.get_shared_state(KEY_FEATURE_RECORDS) or []
         await ctx.add_event(
             AgentRunUpdateEvent(
@@ -327,6 +357,22 @@ class ReportExecutor(Executor):
 
     @handler
     async def generate_report(self, _prev: dict, ctx: WorkflowContext) -> None:
+        # Fast path: direct report already written by FeatureExtractorExecutor
+        markdown = await ctx.get_shared_state(KEY_MARKDOWN)
+        if markdown:
+            logger.success("ReportExecutor: emitting pre-built direct report.")
+            await ctx.add_event(
+                AgentRunUpdateEvent(
+                    self.id,
+                    data=AgentRunResponseUpdate(
+                        contents=[TextContent(text=markdown)],
+                        role=Role.ASSISTANT,
+                        response_id=str(uuid4()),
+                    ),
+                )
+            )
+            return
+
         report = await ctx.get_shared_state(KEY_REPORT)
 
         if not report:
