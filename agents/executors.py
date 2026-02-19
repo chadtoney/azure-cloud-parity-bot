@@ -31,6 +31,7 @@ from loguru import logger
 
 from agents.comparison_agent import ComparisonAgent
 from agents.feature_extractor import FeatureExtractorAgent
+from agents.json_output import JsonOutputAgent
 from agents.learn_scraper import LearnScraperAgent
 from agents.report_generator import ReportGeneratorAgent
 from agents.web_scraper import WebScraperAgent
@@ -45,6 +46,7 @@ KEY_SCRAPED_PAGES = "scraped_pages"
 KEY_FEATURE_RECORDS = "feature_records"
 KEY_REPORT = "report"
 KEY_MARKDOWN = "markdown_report"
+KEY_JSON_OUTPUT = "json_output"
 
 
 # ---------------------------------------------------------------------------
@@ -224,3 +226,39 @@ class ReportExecutor(Executor):
             )
         )
         logger.success("ReportExecutor: response emitted.")
+
+
+# ---------------------------------------------------------------------------
+# 7. JSON output executor – final step; emits structured JSON to the caller
+# ---------------------------------------------------------------------------
+
+class JsonOutputExecutor(Executor):
+    """Serialises the full parity results to JSON and streams it back to the caller."""
+
+    def __init__(self, store: Optional[FeatureStore] = None) -> None:
+        super().__init__(id="json_output")
+        self._agent = JsonOutputAgent(store=store or FeatureStore())
+
+    @handler
+    async def output_json(self, _prev: dict, ctx: WorkflowContext) -> None:
+        report = await ctx.get_shared_state(KEY_REPORT)
+        records = await ctx.get_shared_state(KEY_FEATURE_RECORDS) or []
+
+        if not report:
+            json_str = "{}"
+        else:
+            json_str = self._agent.run(report, records=records or None)
+
+        await ctx.set_shared_state(KEY_JSON_OUTPUT, json_str)
+
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=json_str)],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
+        logger.success("JsonOutputExecutor: JSON response emitted.")

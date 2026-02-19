@@ -4,6 +4,7 @@ from .web_scraper import WebScraperAgent
 from .feature_extractor import FeatureExtractorAgent
 from .comparison_agent import ComparisonAgent
 from .report_generator import ReportGeneratorAgent
+from .json_output import JsonOutputAgent
 from .workflow import build_parity_agent
 from .workflow_state import ParityWorkflowState
 from .executors import (
@@ -13,6 +14,7 @@ from .executors import (
     FeatureExtractorExecutor,
     ComparisonExecutor,
     ReportExecutor,
+    JsonOutputExecutor,
 )
 
 __all__ = [
@@ -22,6 +24,7 @@ __all__ = [
     "FeatureExtractorAgent",
     "ComparisonAgent",
     "ReportGeneratorAgent",
+    "JsonOutputAgent",
     "build_parity_agent",
     "ParityWorkflowState",
     "ParityStarterExecutor",
@@ -30,4 +33,5 @@ __all__ = [
     "FeatureExtractorExecutor",
     "ComparisonExecutor",
     "ReportExecutor",
+    "JsonOutputExecutor",
 ]
