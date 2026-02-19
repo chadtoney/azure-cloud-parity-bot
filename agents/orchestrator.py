@@ -12,6 +12,7 @@ from loguru import logger
 
 from agents.comparison_agent import ComparisonAgent
 from agents.feature_extractor import FeatureExtractorAgent
+from agents.future_features_agent import FutureFeaturesAgent
 from agents.learn_scraper import LearnScraperAgent
 from agents.report_generator import ReportGeneratorAgent
 from agents.web_scraper import WebScraperAgent
@@ -43,6 +44,7 @@ class OrchestratorAgent:
         self._web_scraper = WebScraperAgent()
         self._extractor = FeatureExtractorAgent()
         self._comparison = ComparisonAgent()
+        self._future_features = FutureFeaturesAgent()
         self._reporter = ReportGeneratorAgent(store=self._store)
 
     async def run(
@@ -103,6 +105,10 @@ class OrchestratorAgent:
                 logger.warning(f"  {len(changes['new_gaps'])} new parity gaps detected!")
             if changes["resolved_gaps"]:
                 logger.info(f"  {len(changes['resolved_gaps'])} gaps resolved since last run.")
+
+        # Step 4b – Future features suggestions
+        logger.info("[4b/5] Generating future feature suggestions...")
+        report = await self._future_features.run(report, records)
 
         # Step 5 – Report generation
         logger.info("[5/5] Generating report...")

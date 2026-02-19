@@ -9,6 +9,14 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class SuggestionConfidence(str, Enum):
+    """Confidence level that a suggested feature will advance soon."""
+
+    HIGH = "high"    # Feature is in Preview – typically GA within 6–12 months
+    MEDIUM = "medium"  # Feature is planned / announced but not yet in Preview
+    LOW = "low"      # Status unknown; may be in early development
+
+
 class CloudEnvironment(str, Enum):
     """Azure cloud environments tracked by the bot."""
 
@@ -99,6 +107,25 @@ class FeatureComparison(BaseModel):
         return round(len(self.ga_in_both) / total * 100, 2)
 
 
+class FutureSuggestion(BaseModel):
+    """A suggested future feature advancement for a target cloud environment."""
+
+    feature_id: str = Field(..., description="Feature record ID (service/feature slug)")
+    service_name: str = Field(..., description="Azure service name")
+    feature_name: str = Field(..., description="Feature or capability name")
+    target_cloud: CloudEnvironment = Field(..., description="Target cloud environment")
+    current_status: FeatureStatus = Field(..., description="Current status in the target cloud")
+    rationale: str = Field(..., description="Reasoning behind the suggestion")
+    confidence: SuggestionConfidence = Field(
+        default=SuggestionConfidence.MEDIUM,
+        description="Confidence level that this feature will advance",
+    )
+    estimated_timeline: Optional[str] = Field(
+        default=None,
+        description="Estimated timeline for the advancement (e.g., '6–12 months')",
+    )
+
+
 class ParityReport(BaseModel):
     """Full parity report across all tracked cloud environments."""
 
@@ -109,6 +136,14 @@ class ParityReport(BaseModel):
         description="Keyed by '{baseline}_{target}'",
     )
     summary: Optional[str] = Field(default=None, description="Human-readable summary from report agent")
+    future_suggestions: List[FutureSuggestion] = Field(
+        default_factory=list,
+        description="Suggested upcoming feature advancements per cloud environment",
+    )
+    future_narrative: Optional[str] = Field(
+        default=None,
+        description="LLM-generated narrative summarising the future features roadmap",
+    )
 
 
 class ScrapeJob(BaseModel):

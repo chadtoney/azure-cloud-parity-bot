@@ -3,6 +3,7 @@ from .learn_scraper import LearnScraperAgent
 from .web_scraper import WebScraperAgent
 from .feature_extractor import FeatureExtractorAgent
 from .comparison_agent import ComparisonAgent
+from .future_features_agent import FutureFeaturesAgent
 from .report_generator import ReportGeneratorAgent
 from .workflow import build_parity_agent
 from .workflow_state import ParityWorkflowState
@@ -12,6 +13,7 @@ from .executors import (
     WebScraperExecutor,
     FeatureExtractorExecutor,
     ComparisonExecutor,
+    FutureFeaturesExecutor,
     ReportExecutor,
 )
 
@@ -21,6 +23,7 @@ __all__ = [
     "WebScraperAgent",
     "FeatureExtractorAgent",
     "ComparisonAgent",
+    "FutureFeaturesAgent",
     "ReportGeneratorAgent",
     "build_parity_agent",
     "ParityWorkflowState",
@@ -29,5 +32,6 @@ __all__ = [
     "WebScraperExecutor",
     "FeatureExtractorExecutor",
     "ComparisonExecutor",
+    "FutureFeaturesExecutor",
     "ReportExecutor",
 ]
