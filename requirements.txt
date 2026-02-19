@@ -1,0 +1,33 @@
+# Microsoft Agent Framework – pin to avoid breaking renames
+agent-framework-azure-ai==1.0.0b260107
+agent-framework-core==1.0.0b260107
+
+# Azure AI Foundry Agents Service (agents visible in ai.azure.com portal)
+azure-ai-agents>=1.0.0
+azure-identity>=1.16.0
+
+# Agent HTTP server support (Agent Inspector & deployment)
+azure-ai-agentserver-core==1.0.0b10
+azure-ai-agentserver-agentframework==1.0.0b10
+
+# Azure OpenAI
+openai>=1.30.0
+
+# HTTP / scraping
+httpx>=0.27.0
+beautifulsoup4>=4.12.0
+lxml>=5.0.0
+
+# Data models & config
+pydantic>=2.7.0
+pydantic-settings>=2.3.0
+
+# Environment & logging
+python-dotenv>=1.0.0
+loguru>=0.7.0
+
+# Debugging (VS Code Python Debugger)
+debugpy
+
+# Agent Inspector integration
+agent-dev-cli --pre
