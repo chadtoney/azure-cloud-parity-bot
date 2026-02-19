@@ -4,10 +4,31 @@
 This is a multi-agent AI system that tracks and compares Azure service feature availability across different Azure cloud environments (Commercial, GCC, GCC-High, DoD IL2/IL4/IL5, Azure China, etc.).
 
 ## Architecture
-- **Multi-agent system** using Python with `semantic-kernel` or `openai` Agents SDK
-- **MCP Integration**: Uses Microsoft Learn MCP and web fetcher tools to gather feature data
-- **Feature Store**: Persists structured feature parity data (JSON/SQLite)
-- **Orchestrator**: Coordinates scraping, extraction, comparison, and reporting agents
+- **Multi-agent system** using Python with the **Microsoft Agent Framework** (`agent-framework-azure-ai`, `agent-framework-core`)
+- **Pipeline**: `WorkflowBuilder.add_chain` wires executors: Starter → LearnScraper → WebScraper → FeatureExtractor → Comparison → Report
+- **Feature Store**: Persists structured feature parity data as JSON in `data/features/`
+- **Deployment target**: Microsoft Foundry (new) — see Foundry section below
+
+## Microsoft Foundry: New vs. Classic (Hub-based)
+
+### New Foundry (target for this project)
+- Resource type: **`Microsoft Foundry`** (unified, under `Microsoft.CognitiveServices`)
+- **No Hub, no separate Storage Account or Key Vault required** — much simpler to provision
+- Projects are child resources of the single Foundry resource
+- Project endpoint format: `https://<resource-name>.services.ai.azure.com/api/projects/<project-name>`
+- **Agents are GA** (not preview)
+- Full Foundry SDK & API support, Azure OpenAI-compatible APIs included
+- Only the **default project** is visible in the new Foundry portal (`ai.azure.com` with "New Foundry" toggle on)
+- Create via Azure Portal → "Azure AI Foundry" resource type, or `az cognitiveservices account create --kind AIServices`
+- Set `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` to the project endpoint from the portal's Home page
+
+### Classic / Hub-based (do NOT use for new work)
+- Resource type: `Microsoft.MachineLearningServices/workspaces` with `kind: Hub`
+- Requires: Hub + Project + Storage Account + Key Vault (4 resources minimum)
+- Agents are **preview only**
+- Visible in Foundry (classic) portal only
+- The `team2parity-hub` resource in Team2 RG is this type — migrate or delete in favor of new Foundry
+- The new Foundry portal hides hub-based projects entirely
 
 ## Agent Roles
 - `orchestrator` - Coordinates all agents, manages workflow

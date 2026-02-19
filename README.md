@@ -44,7 +44,22 @@ Built with `WorkflowBuilder.add_chain` – all inter-step data flows through `ct
 ## Prerequisites
 
 - Python 3.10+
-- Azure OpenAI resource with a `gpt-4o` (or similar) deployment
+- **Microsoft Foundry (new)** resource with a model deployment (see below)
+
+## Microsoft Foundry: New vs. Classic
+
+This project targets **Microsoft Foundry (new)** — not the older hub-based (classic) architecture.
+
+| | New Foundry (use this) | Classic / Hub-based (legacy) |
+|---|---|---|
+| Azure resource type | `Microsoft Foundry` (`AIServices` kind) | `Microsoft.MachineLearningServices/workspaces` Hub |
+| Dependencies | None — single resource | Hub + Project + Storage + Key Vault |
+| Agents | ✅ GA | ⚠️ Preview only |
+| Foundry SDK & API | ✅ Full | ⚠️ Limited |
+| Portal | [ai.azure.com](https://ai.azure.com) — "New Foundry" toggle ON | [ai.azure.com](https://ai.azure.com) — "New Foundry" toggle OFF (classic) |
+| Project endpoint | `https://<resource>.services.ai.azure.com/api/projects/<project>` | `https://<region>.api.azureml.ms/...` |
+
+> **Note:** The `team2parity-hub` resource provisioned in Team2 RG is hub-based (classic). For new deployments, create a **Microsoft Foundry** resource instead.
 
 ## Setup
 
@@ -65,9 +80,12 @@ pip install -r requirements.txt
 
 | Variable | Description |
 |----------|-------------|
-| `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI endpoint URL |
-| `AZURE_OPENAI_API_KEY` | Your Azure OpenAI API key |
-| `AZURE_OPENAI_DEPLOYMENT` | Chat deployment name (e.g. `gpt-4o`) |
+| `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` | New Foundry project endpoint — find it on the project Home page in [ai.azure.com](https://ai.azure.com) (New Foundry toggle ON) |
+| `AZURE_OPENAI_ENDPOINT` | Your Azure OpenAI / Foundry resource endpoint URL |
+| `AZURE_OPENAI_API_KEY` | API key (or leave blank + use `az login` for Entra ID auth) |
+| `AZURE_OPENAI_DEPLOYMENT` | Model deployment name (e.g. `gpt-4o`) |
+
+> **Tip:** With New Foundry, `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` is the primary connection. Azure OpenAI-compatible APIs are included — no separate Azure OpenAI resource required.
 
 ## Running
 
