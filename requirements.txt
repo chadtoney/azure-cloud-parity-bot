@@ -6,9 +6,6 @@ agent-framework-core==1.0.0b260107
 azure-ai-agents>=1.0.0
 azure-identity>=1.16.0
 
-# Azure AI Projects SDK – required for hosted agent registration (deploy_agent.py)
-azure-ai-projects>=2.0.0b3
-
 # Agent HTTP server support (Agent Inspector & deployment)
 azure-ai-agentserver-core==1.0.0b10
 azure-ai-agentserver-agentframework==1.0.0b10
