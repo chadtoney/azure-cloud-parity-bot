@@ -34,6 +34,7 @@ from agents.feature_extractor import FeatureExtractorAgent
 from agents.learn_scraper import LearnScraperAgent
 from agents.report_generator import ReportGeneratorAgent
 from agents.web_scraper import WebScraperAgent
+from config.settings import settings
 from models.feature import CloudEnvironment
 from storage.feature_store import FeatureStore
 
@@ -117,6 +118,21 @@ class LearnScraperExecutor(Executor):
         target = await ctx.get_shared_state(KEY_TARGET_SERVICE)
         extra_urls: list = await ctx.get_shared_state(KEY_EXTRA_URLS) or []
 
+        if settings.skip_scraping:
+            logger.info("LearnScraperExecutor: SKIP_SCRAPING=true, skipping.")
+            await ctx.add_event(
+                AgentRunUpdateEvent(
+                    self.id,
+                    data=AgentRunResponseUpdate(
+                        contents=[TextContent(text="📚 Using LLM knowledge base (live scraping disabled)...")],
+                        role=Role.ASSISTANT,
+                        response_id=str(uuid4()),
+                    ),
+                )
+            )
+            await ctx.send_message({})
+            return
+
         if target:
             results = await self._agent.search(
                 f"Azure {target} government availability feature parity"
@@ -167,6 +183,11 @@ class WebScraperExecutor(Executor):
 
     @handler
     async def scrape_web(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        if settings.skip_scraping:
+            logger.info("WebScraperExecutor: SKIP_SCRAPING=true, skipping.")
+            await ctx.send_message({})
+            return
+
         await ctx.add_event(
             AgentRunUpdateEvent(
                 self.id,

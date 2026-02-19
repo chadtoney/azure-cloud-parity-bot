@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     scrape_timeout_seconds: int = Field(default=30)
     scrape_max_retries: int = Field(default=3)
     scrape_delay_seconds: float = Field(default=1.0)
+    # Set SKIP_SCRAPING=true in environments where outbound internet is
+    # restricted (e.g. Foundry hosted-agent containers). The pipeline will
+    # use the LLM's training knowledge instead of live web fetches.
+    skip_scraping: bool = Field(
+        default=False,
+        description="Skip live web scraping and use LLM knowledge base instead",
+    )
 
     # ── Source URLs ───────────────────────────────────────────────────────────
     source_urls: List[str] = Field(

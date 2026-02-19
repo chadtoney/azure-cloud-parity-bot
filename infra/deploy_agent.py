@@ -75,6 +75,7 @@ def deploy(image: str) -> None:
                 "AZURE_OPENAI_DEPLOYMENT": MODEL_NAME,
                 "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
                 "AGENT_DEBUG_ERRORS": "true",  # expose full errors in responses
+                "SKIP_SCRAPING": "true",  # outbound internet blocked in Foundry container
             },
         ),
     )
