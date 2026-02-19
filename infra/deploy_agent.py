@@ -25,7 +25,7 @@ MODEL_NAME = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
 AGENT_NAME = "azure-cloud-parity-bot"
 
 
-def deploy(image: str, version_action: str = "create") -> None:
+def deploy(image: str) -> None:
     from azure.ai.projects import AIProjectClient
     from azure.ai.projects.models import (
         AgentProtocol,
@@ -36,6 +36,26 @@ def deploy(image: str, version_action: str = "create") -> None:
 
     print(f"Connecting to Foundry project: {PROJECT_ENDPOINT}")
     client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=DefaultAzureCredential())
+
+    # Determine next version number
+    try:
+        existing = client.agents.get(agent_name=AGENT_NAME)
+        current_version = int(existing.versions.latest.version)
+        next_version = current_version + 1
+        print(f"Existing agent found at version {current_version}. Will create version {next_version}.")
+        # Stop the running version before creating a new one
+        import subprocess
+        subprocess.run(
+            ["az", "cognitiveservices", "agent", "stop",
+             "--account-name", "cloudparitybotproject-resource",
+             "--project-name", "cloudparitybotproject",
+             "--name", AGENT_NAME,
+             "--agent-version", str(current_version)],
+            shell=True, capture_output=True
+        )
+        print(f"Stopped version {current_version}.")
+    except Exception:
+        print("No existing agent found. Creating version 1.")
 
     print(f"Registering agent '{AGENT_NAME}' with image: {image}")
     agent = client.agents.create_version(

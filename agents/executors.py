@@ -86,6 +86,18 @@ class ParityStarterExecutor(Executor):
             logger.info(f"StarterExecutor: targeted service = '{target}'")
         else:
             logger.info("StarterExecutor: full parity scan requested")
+
+        label = f"🔍 Analyzing **{target}** cloud parity..." if target else "🔍 Running full Azure cloud parity analysis..."
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=label)],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         await ctx.send_message({})
 
 
@@ -115,10 +127,30 @@ class LearnScraperExecutor(Executor):
                     extra_urls.append(url)
             await ctx.set_shared_state(KEY_EXTRA_URLS, extra_urls)
 
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text="📚 Fetching Microsoft Learn documentation...")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         pages = await self._agent.run()
         existing: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
         await ctx.set_shared_state(KEY_SCRAPED_PAGES, {**existing, **pages})
         logger.info(f"LearnScraperExecutor: fetched {len(pages)} pages.")
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=f"📚 Fetched {len(pages)} Learn pages.")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         await ctx.send_message({})
 
 
@@ -135,11 +167,31 @@ class WebScraperExecutor(Executor):
 
     @handler
     async def scrape_web(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text="🌐 Scraping Azure product pages and sovereign cloud docs...")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         extra_urls: list = await ctx.get_shared_state(KEY_EXTRA_URLS) or []
         pages = await self._agent.run(extra_urls=extra_urls or None)
         existing: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
         await ctx.set_shared_state(KEY_SCRAPED_PAGES, {**existing, **pages})
         logger.info(f"WebScraperExecutor: +{len(pages)} pages.")
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=f"🌐 Scraped {len(pages)} web pages.")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         await ctx.send_message({})
 
 
@@ -158,6 +210,16 @@ class FeatureExtractorExecutor(Executor):
     @handler
     async def extract_features(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
         pages: dict = await ctx.get_shared_state(KEY_SCRAPED_PAGES) or {}
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=f"🤖 Extracting feature records from {len(pages)} pages (this may take a minute)...")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         records = await self._agent.run(pages)
 
         if records:
@@ -168,6 +230,16 @@ class FeatureExtractorExecutor(Executor):
 
         await ctx.set_shared_state(KEY_FEATURE_RECORDS, records)
         logger.info(f"FeatureExtractorExecutor: {len(records)} records.")
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=f"✅ Extracted {len(records)} feature records. Building comparison...")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         await ctx.send_message({})
 
 
@@ -185,6 +257,16 @@ class ComparisonExecutor(Executor):
     @handler
     async def compare(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
         records = await ctx.get_shared_state(KEY_FEATURE_RECORDS) or []
+        await ctx.add_event(
+            AgentRunUpdateEvent(
+                self.id,
+                data=AgentRunResponseUpdate(
+                    contents=[TextContent(text=f"📊 Comparing {len(records)} features across Commercial, GCC, GCC-High, DoD, and China...")],
+                    role=Role.ASSISTANT,
+                    response_id=str(uuid4()),
+                ),
+            )
+        )
         report = self._agent.run(records, baseline=CloudEnvironment.COMMERCIAL)
         await ctx.set_shared_state(KEY_REPORT, report)
         logger.info("ComparisonExecutor: report built.")
