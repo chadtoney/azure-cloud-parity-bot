@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from loguru import logger
 from openai import AsyncAzureOpenAI
 
@@ -34,12 +35,23 @@ class ReportGeneratorAgent:
     def __init__(self, store: Optional[FeatureStore] = None) -> None:
         self._store = store or FeatureStore()
         self._llm: Optional[AsyncAzureOpenAI] = None
-        if settings.azure_openai_endpoint and settings.azure_openai_api_key:
-            self._llm = AsyncAzureOpenAI(
-                azure_endpoint=settings.azure_openai_endpoint,
-                api_key=settings.azure_openai_api_key,
-                api_version=settings.azure_openai_api_version,
-            )
+        if settings.azure_openai_endpoint:
+            if settings.azure_openai_api_key:
+                self._llm = AsyncAzureOpenAI(
+                    azure_endpoint=settings.azure_openai_endpoint,
+                    api_key=settings.azure_openai_api_key,
+                    api_version=settings.azure_openai_api_version,
+                )
+            else:
+                # Entra ID auth – uses az login / managed identity / workload identity
+                token_provider = get_bearer_token_provider(
+                    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+                )
+                self._llm = AsyncAzureOpenAI(
+                    azure_endpoint=settings.azure_openai_endpoint,
+                    azure_ad_token_provider=token_provider,
+                    api_version=settings.azure_openai_api_version,
+                )
 
     async def run(self, report: ParityReport) -> str:
         """Build the full Markdown report and optionally attach an LLM summary."""
