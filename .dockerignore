@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / tooling
+.vscode/
+.idea/
+*.code-workspace
+
+# Git
+.git/
+.gitignore
+
+# Secrets – NEVER bake into the image
+.env
+*.env
+
+# Runtime outputs (mounted or written at runtime)
+data/features/
+reports/
+logs/
+
+# Tests / docs
+tests/
+*.md
+LICENSE
+
+# Infra (not needed in container)
+infra/
