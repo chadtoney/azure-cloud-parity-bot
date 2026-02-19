@@ -12,6 +12,7 @@ from agent_framework import WorkflowBuilder, WorkflowAgent
 from agents.executors import (
     ComparisonExecutor,
     FeatureExtractorExecutor,
+    JsonOutputExecutor,
     LearnScraperExecutor,
     ParityStarterExecutor,
     ReportExecutor,
@@ -31,7 +32,8 @@ def build_parity_agent() -> WorkflowAgent:
             → WebScraperExecutor
             → FeatureExtractorExecutor
             → ComparisonExecutor
-            → ReportExecutor        (emits AgentRunUpdateEvent)
+            → ReportExecutor        (Markdown report)
+            → JsonOutputExecutor    (structured JSON output)
     """
     store = FeatureStore()
 
@@ -41,10 +43,11 @@ def build_parity_agent() -> WorkflowAgent:
     extractor = FeatureExtractorExecutor(store=store)
     comparison = ComparisonExecutor()
     reporter = ReportExecutor(store=store)
+    json_output = JsonOutputExecutor(store=store)
 
     agent: WorkflowAgent = (
         WorkflowBuilder()
-        .add_chain([starter, learn_scraper, web_scraper, extractor, comparison, reporter])
+        .add_chain([starter, learn_scraper, web_scraper, extractor, comparison, reporter, json_output])
         .set_start_executor(starter)
         .build()
         .as_agent()
