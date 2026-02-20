@@ -94,9 +94,9 @@ class FeatureExtractorAgent:
                     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
                 )
                 client_kwargs["azure_ad_token_provider"] = token_provider
-            # Hard 25s timeout so a blocked network call fails before Foundry's 30s deadline.
+            # Hard 20s timeout so a blocked network call fails before Foundry's 30s deadline.
             client_kwargs["http_client"] = httpx.AsyncClient(
-                timeout=httpx.Timeout(25.0, connect=10.0)
+                timeout=httpx.Timeout(20.0, connect=10.0)
             )
             self._llm = AsyncAzureOpenAI(**client_kwargs)       # gpt-4o  – deep knowledge tasks
             self._fast_llm = AsyncAzureOpenAI(**client_kwargs)  # gpt-4o-mini – speed tasks

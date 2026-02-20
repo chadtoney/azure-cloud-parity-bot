@@ -366,20 +366,11 @@ class ReportExecutor(Executor):
 
     @handler
     async def generate_report(self, _prev: dict, ctx: WorkflowContext) -> None:
-        # Fast path: direct report already written by FeatureExtractorExecutor
+        # Fast path: direct report was already streamed chunk-by-chunk by
+        # FeatureExtractorExecutor — nothing more to emit here.
         markdown = await ctx.get_shared_state(KEY_MARKDOWN)
         if markdown:
-            logger.success("ReportExecutor: emitting pre-built direct report.")
-            await ctx.add_event(
-                AgentRunUpdateEvent(
-                    self.id,
-                    data=AgentRunResponseUpdate(
-                        contents=[TextContent(text=markdown)],
-                        role=Role.ASSISTANT,
-                        response_id=str(uuid4()),
-                    ),
-                )
-            )
+            logger.success("ReportExecutor: direct report already streamed, done.")
             return
 
         report = await ctx.get_shared_state(KEY_REPORT)

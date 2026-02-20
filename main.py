@@ -60,18 +60,45 @@ async def _run_cli(query: str) -> None:
                     print(part.text)
 
 
+async def _warm_credentials() -> None:
+    """Acquire an Azure token before accepting traffic to avoid first-request latency.
+
+    DefaultAzureCredential probes multiple credential types in a container
+    (EnvironmentCredential, WorkloadIdentity, ManagedIdentity, etc.).  The
+    first probe can take 1-5 s.  Doing it before the server starts serving
+    keeps that cost off the 30s Foundry request deadline.
+    """
+    from config.settings import settings
+    if not settings.azure_openai_endpoint:
+        return
+    try:
+        from azure.identity import DefaultAzureCredential
+        cred = DefaultAzureCredential()
+        tok = cred.get_token("https://cognitiveservices.azure.com/.default")
+        logger.info(f"Credential warm-up OK (token expires {tok.expires_on}).")
+    except Exception as exc:  # non-fatal — will retry on first request
+        logger.warning(f"Credential warm-up failed (will retry on first request): {exc}")
+
+
 async def _run_server() -> None:
     """Start the HTTP server backed by the parity agent."""
     from azure.ai.agentserver.agentframework import from_agent_framework
 
-    # Pass build_parity_workflow as a factory (not a pre-built agent).
-    # AgentFrameworkWorkflowAdapter._build_agent() calls factory().as_agent()
-    # to create a fresh WorkflowAgent per conversation request.
-    logger.info("Starting Azure Cloud Parity Bot HTTP server...")
-    await from_agent_framework(build_parity_workflow).run_async()
+    # Build the workflow ONCE at startup — DefaultAzureCredential init inside
+    # FeatureExtractorAgent / ReportGeneratorAgent takes ~600ms each, so
+    # rebuilding per-request adds >1s of latency.  The cached workflow is
+    # safe to share: all mutable run state lives in WorkflowContext (per-run),
+    # not in the executor instances.
+    logger.info("Building parity workflow (one-time startup init)...")
+    _workflow = build_parity_workflow()
+    logger.info("Parity workflow ready.  Warming Azure credentials...")
+    await _warm_credentials()
+    logger.info("Starting HTTP server...")
+    await from_agent_framework(lambda: _workflow).run_async()
 
 
 def main() -> None:
+    print("=== Azure Cloud Parity Bot starting ===", flush=True)
     _configure_logging()
 
     parser = argparse.ArgumentParser(description="Azure Cloud Feature Parity Bot")
