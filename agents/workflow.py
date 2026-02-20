@@ -19,8 +19,8 @@ from storage.feature_store import FeatureStore
 def build_parity_workflow() -> Workflow:
     """
     Factory that returns a fresh Workflow each call.
-    Used by from_agent_framework() as a per-request factory:
-        AgentFrameworkWorkflowAdapter._build_agent() calls factory().as_agent()
+    Called by build_parity_agent() which wraps the result with .as_agent().
+    Also used directly in CLI mode for lightweight testing.
     """
     store = FeatureStore()
 
