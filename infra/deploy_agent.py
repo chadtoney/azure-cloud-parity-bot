@@ -43,17 +43,21 @@ def deploy(image: str) -> None:
         current_version = int(existing.versions.latest.version)
         next_version = current_version + 1
         print(f"Existing agent found at version {current_version}. Will create version {next_version}.")
-        # Stop the running version before creating a new one
+        # Stop the running version via the SDK (subprocess shell=True on Windows
+        # silently drops list args — the old approach never worked).
         import subprocess
-        subprocess.run(
-            ["az", "cognitiveservices", "agent", "stop",
-             "--account-name", "cloudparitybotproject-resource",
-             "--project-name", "cloudparitybotproject",
-             "--name", AGENT_NAME,
-             "--agent-version", str(current_version)],
-            shell=True, capture_output=True
+        stop_cmd = (
+            f"az cognitiveservices agent stop"
+            f" --account-name cloudparitybotproject-resource"
+            f" --project-name cloudparitybotproject"
+            f" --name {AGENT_NAME}"
+            f" --agent-version {current_version}"
         )
-        print(f"Stopped version {current_version}.")
+        result = subprocess.run(stop_cmd, shell=True, capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"Stopped version {current_version}.")
+        else:
+            print(f"⚠️  Could not stop version {current_version} (may already be stopped): {result.stderr.strip()}")
     except Exception:
         print("No existing agent found. Creating version 1.")
 
@@ -94,22 +98,22 @@ def deploy(image: str) -> None:
     print("Starting agent deployment...")
     import subprocess
 
-    cmd = [
-        "az", "cognitiveservices", "agent", "start",
-        "--account-name", "cloudparitybotproject-resource",
-        "--project-name", "cloudparitybotproject",
-        "--name", AGENT_NAME,
-        "--agent-version", str(agent.version),
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, shell=True)
+    start_cmd = (
+        f"az cognitiveservices agent start"
+        f" --account-name cloudparitybotproject-resource"
+        f" --project-name cloudparitybotproject"
+        f" --name {AGENT_NAME}"
+        f" --agent-version {agent.version}"
+    )
+    result = subprocess.run(start_cmd, shell=True, capture_output=True, text=True)
     if result.returncode == 0:
         print("✅ Agent deployment started successfully.")
         print(result.stdout)
     else:
         print("⚠️  az cognitiveservices agent start failed:")
         print(result.stderr)
-        print("You can start it manually with:")
-        print("  " + " ".join(cmd))
+        print("Run manually:")
+        print(f"  {start_cmd}")
 
 
 if __name__ == "__main__":
