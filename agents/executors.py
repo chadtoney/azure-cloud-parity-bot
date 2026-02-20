@@ -374,7 +374,7 @@ class ReportExecutor(Executor):
         self._agent = ReportGeneratorAgent(store=store or FeatureStore())
 
     @handler
-    async def generate_report(self, _prev: dict, ctx: WorkflowContext) -> None:
+    async def generate_report(self, _prev: dict, ctx: WorkflowContext[dict]) -> None:
         # Fast path: direct report was already streamed chunk-by-chunk by
         # FeatureExtractorExecutor — nothing more to emit here.
         markdown = await ctx.get_shared_state(KEY_MARKDOWN)

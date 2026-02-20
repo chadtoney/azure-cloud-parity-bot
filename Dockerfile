@@ -21,6 +21,7 @@ COPY models/ models/
 COPY storage/ storage/
 COPY utils/ utils/
 COPY main.py .
+COPY diag_main.py .
 
 # Create runtime directories
 RUN mkdir -p data/features reports logs

@@ -10,20 +10,81 @@ python main.py
 python main.py --cli --query "Check Azure Kubernetes Service government parity"
 """
 
-from __future__ import annotations
-
-import argparse
-import asyncio
+# ── CRASH DIAGNOSTICS: raw writes BEFORE any third-party imports ──────────────
+# NOTE: `from __future__ import annotations` is intentionally OMITTED – it must
+# appear before all other statements (except docstrings/comments) which would
+# prevent the early-logging block below.  main.py uses no complex type aliases
+# that require it, so the omission is safe.
+#
+# PYTHONUNBUFFERED=1 in the Dockerfile ensures these writes appear immediately
+# in the container logstream.  If ALIVE1 never shows up we know Python is
+# killed before it runs a single bytecode instruction (OOM, bad entrypoint…).
 import sys
+import os
 
-from dotenv import load_dotenv
-from loguru import logger
+sys.stdout.write("ALIVE1 – Python started\n"); sys.stdout.flush()
+sys.stderr.write("ALIVE1 – Python started\n"); sys.stderr.flush()
 
-# Load env FIRST, with override=True so deployed env vars take precedence
-load_dotenv(override=True)
 
-from config.settings import settings  # noqa: E402 – must be after load_dotenv
-from agents.workflow import build_parity_agent  # noqa: E402  (build_parity_workflow used in CLI only)
+def _early_log(msg: str) -> None:
+    sys.stdout.write(msg + "\n"); sys.stdout.flush()
+    sys.stderr.write(msg + "\n"); sys.stderr.flush()
+
+
+_early_log(f"ALIVE2 – Python {sys.version}")
+_early_log(f"ALIVE3 – cwd={os.getcwd()}")
+_early_log(f"ALIVE4 – key env: SKIP_SCRAPING={os.getenv('SKIP_SCRAPING')} "
+           f"AZURE_OPENAI_ENDPOINT={os.getenv('AZURE_OPENAI_ENDPOINT', '(not set)')[:50]}")
+
+# ── stdlib imports ─────────────────────────────────────────────────────────────
+try:
+    import argparse
+    import asyncio
+    _early_log("ALIVE5 – stdlib OK")
+except Exception as _e:
+    _early_log(f"ERR stdlib: {_e}")
+    sys.exit(1)
+
+# ── third-party base ──────────────────────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    _early_log("ALIVE6 – dotenv OK")
+except Exception as _e:
+    _early_log(f"ERR dotenv: {_e}")
+    sys.exit(1)
+
+try:
+    from loguru import logger
+    _early_log("ALIVE7 – loguru OK")
+except Exception as _e:
+    _early_log(f"ERR loguru: {_e}")
+    sys.exit(1)
+
+# ── env + settings ────────────────────────────────────────────────────────────
+try:
+    load_dotenv(override=True)
+    _early_log("ALIVE8 – load_dotenv OK")
+except Exception as _e:
+    _early_log(f"ERR load_dotenv: {_e}")
+
+try:
+    from config.settings import settings  # noqa: E402 – must be after load_dotenv
+    _early_log(f"ALIVE9 – settings OK (skip_scraping={settings.skip_scraping})")
+except Exception as _e:
+    _early_log(f"ERR settings (FATAL): {_e}")
+    sys.exit(1)
+
+# ── agent workflow import ─────────────────────────────────────────────────────
+try:
+    from agents.workflow import build_parity_agent
+    _early_log("ALIVE10 – build_parity_agent imported OK")
+except Exception as _e:
+    _early_log(f"ERR agents.workflow (FATAL): {_e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+
+# ── END DIAGNOSTICS – normal startup proceeds below ───────────────────────────
 
 
 def _configure_logging() -> None:
@@ -117,9 +178,12 @@ async def _run_server() -> None:
     # Warm the credential singleton shared by FeatureExtractorAgent and
     # ReportGeneratorAgent so the managed-identity token is cached before the
     # first request, keeping startup cost off the 30s Foundry deadline.
-    _checkpoint("warming Azure credentials")
+    _checkpoint("warming Azure credentials (timeout 10s)")
     _t1 = _time.time()
-    await warm_feature_extractor_credential()
+    try:
+        await asyncio.wait_for(warm_feature_extractor_credential(), timeout=10.0)
+    except asyncio.TimeoutError:
+        logger.warning("warm_feature_extractor_credential timed out after 10s — uvicorn will start anyway, retry on first request")
     _checkpoint(f"credential warm-up done in {_time.time()-_t1:.2f}s")
     _checkpoint(f"total pre-server init: {_time.time()-_t0:.2f}s — starting uvicorn")
     await from_agent_framework(_agent).run_async()

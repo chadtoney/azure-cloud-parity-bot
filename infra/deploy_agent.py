@@ -74,11 +74,23 @@ def deploy(image: str) -> None:
             image=image,
             environment_variables={
                 "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,
-                # NOTE: do NOT set AZURE_AI_PROJECT_ENDPOINT — the hosting adapter uses that
-                # env var to trigger _setup_tracing_with_azure_ai_client() which creates a
-                # DefaultAzureCredential() and calls get_application_insights_connection_string()
-                # in a background asyncio task.  DefaultAzureCredential probes are SYNCHRONOUS,
-                # so they block the asyncio event loop and delay every request by 90-100 seconds.
+                # NOTE: do NOT set AZURE_AI_PROJECT_ENDPOINT to a real value —
+                # the hosting adapter uses that env var to trigger
+                # _setup_tracing_with_azure_ai_client(), which calls
+                # DefaultAzureCredential().get_token() SYNCHRONOUSLY, blocking
+                # the asyncio event loop for 90-100 seconds.
+                # We set it to empty string so that even if Foundry injects a
+                # value, our explicit definition takes precedence and the empty
+                # string is falsy → tracing setup is skipped.
+                "AZURE_AI_PROJECT_ENDPOINT": "",
+                # Setting APPLICATIONINSIGHTS_CONNECTION_STRING to a non-empty
+                # sentinel prevents the agentserver logger from calling
+                # AIProjectClient.telemetry.get_application_insights_connection_string()
+                # (a blocking HTTPS call that can hang for 60-120 seconds).
+                # The string "skip-telemetry" is not a valid connection string,
+                # so the Application Insights exporter creation will fail
+                # harmlessly and telemetry will be disabled.
+                "APPLICATIONINSIGHTS_CONNECTION_STRING": "skip-telemetry",
                 # Use services.ai.azure.com endpoint – reachable from Foundry container networking.
                 "AZURE_OPENAI_ENDPOINT": "https://cloudparitybotproject-resource.services.ai.azure.com/",
                 "AZURE_OPENAI_DEPLOYMENT": MODEL_NAME,

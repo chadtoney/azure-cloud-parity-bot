@@ -87,6 +87,81 @@ pip install -r requirements.txt
 
 > **Tip:** With New Foundry, `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` is the primary connection. Azure OpenAI-compatible APIs are included — no separate Azure OpenAI resource required.
 
+## Deployment (Foundry Hosted Agent)
+
+### Prerequisites
+
+Before deploying, ensure the following are in place. These are **non-obvious** and skipping
+any one of them produces silent `ActivationFailed` failures. See [LESSONS_LEARNED.md](LESSONS_LEARNED.md)
+for the full debugging story.
+
+#### 1. ACR — Enable anonymous pull (Standard tier required)
+
+```bash
+az acr update --name <registry> --sku Standard
+az acr update --name <registry> --anonymous-pull-enabled true
+```
+
+#### 2. RBAC — Three identities, three roles
+
+```bash
+# a) AcrPull → Foundry resource SYSTEM-ASSIGNED MI (pulls container images)
+FOUNDRY_MI=$(az cognitiveservices account show \
+  --name <foundry-resource> --resource-group <rg> \
+  --query "identity.principalId" -o tsv)
+az role assignment create --assignee-object-id $FOUNDRY_MI \
+  --role AcrPull --scope $(az acr show --name <registry> --query id -o tsv)
+
+# b) Cognitive Services OpenAI User → project workload MI (makes API calls)
+# c) Azure AI User → project workload MI (makes API calls)
+# Project workload MI principal ID is shown when you create the agent via az cognitiveservices
+```
+
+### Build & Push
+
+```bash
+# Build and push directly to ACR (cross-platform, no local Docker required)
+az acr build \
+  --registry cloudparitybotreg \
+  --image parity-bot:vN \
+  --platform linux/amd64 \
+  .
+```
+
+### Deploy / Update Agent
+
+```bash
+# Register a new version and start with min_replicas=1
+python infra/deploy_agent.py --image cloudparitybotreg.azurecr.io/parity-bot:vN
+```
+
+The deploy script:
+- Creates/updates the agent version with required env vars
+- Starts the container with `min_replicas: 1` (via REST API — az CLI doesn't expose this)
+- Sets `APPLICATIONINSIGHTS_CONNECTION_STRING=skip-telemetry` and `AZURE_AI_PROJECT_ENDPOINT=""`
+  to prevent blocking SDK initialization at startup
+
+### Verify
+
+```bash
+python check_status.py
+# Expected: full Markdown parity report in under 30s
+```
+
+### Deployment Checklist
+
+```
+□ ACR Standard tier, anonymousPullEnabled=true
+□ Foundry resource system MI → AcrPull on ACR
+□ Project workload MI → Cognitive Services OpenAI User on AI Services
+□ Project workload MI → Azure AI User on AI Services
+□ Dockerfile: ENV PYTHONUNBUFFERED=1
+□ executors.py: NO from __future__ import annotations
+□ main.py: ALIVE1 diagnostic before any third-party import
+□ Local test passes: python main.py with SKIP_SCRAPING=true
+□ python check_status.py returns parity report after deploy
+```
+
 ## Running
 
 ### HTTP Server mode (recommended – works with Agent Inspector)
