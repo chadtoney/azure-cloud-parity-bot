@@ -234,26 +234,35 @@ class FeatureExtractorExecutor(Executor):
         query: str = await ctx.get_shared_state(KEY_QUERY) or "Azure cloud feature parity"
 
         if settings.skip_scraping:
-            # Fast path: single LLM call generates the complete report directly.
-            # Bypasses JSON extraction, Pydantic parsing, comparison loops, and
-            # the second LLM call in ReportGeneratorAgent.
+            # Streaming fast path: emit each LLM chunk as it arrives.
+            # First token reaches Foundry in ~1s — well within the 30s deadline.
+            response_id = str(uuid4())
             await ctx.add_event(
                 AgentRunUpdateEvent(
                     self.id,
                     data=AgentRunResponseUpdate(
-                        contents=[TextContent(text="🤖 Generating parity report from Azure knowledge base...")],
+                        contents=[TextContent(text="🤖 Generating parity report...")],
                         role=Role.ASSISTANT,
-                        response_id=str(uuid4()),
+                        response_id=response_id,
                     ),
                 )
             )
-            report_md = await self._agent.run_direct_report(query)
-            if report_md:
-                await ctx.set_shared_state(KEY_MARKDOWN, report_md)
-                await ctx.set_shared_state(KEY_FEATURE_RECORDS, [])
-                logger.success("FeatureExtractorExecutor: direct report ready (1 LLM call).")
-            else:
-                await ctx.set_shared_state(KEY_FEATURE_RECORDS, [])
+            full_report: list[str] = []
+            async for chunk in self._agent.stream_direct_report(query):
+                full_report.append(chunk)
+                await ctx.add_event(
+                    AgentRunUpdateEvent(
+                        self.id,
+                        data=AgentRunResponseUpdate(
+                            contents=[TextContent(text=chunk)],
+                            role=Role.ASSISTANT,
+                            response_id=response_id,
+                        ),
+                    )
+                )
+            await ctx.set_shared_state(KEY_MARKDOWN, "".join(full_report))
+            await ctx.set_shared_state(KEY_FEATURE_RECORDS, [])
+            logger.success("FeatureExtractorExecutor: streamed direct report complete.")
             await ctx.send_message({})
             return
 

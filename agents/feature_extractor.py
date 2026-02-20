@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional
 
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from loguru import logger
@@ -148,23 +148,7 @@ class FeatureExtractorAgent:
             logger.error(f"FeatureExtractorAgent.run_from_knowledge failed: {exc}")
             return []
 
-    async def run_direct_report(self, query: str) -> str:
-        """
-        Generate a complete formatted parity report in a SINGLE LLM call.
-
-        Skips JSON extraction, Pydantic parsing, comparison loops, and the
-        second LLM summary call in ReportGeneratorAgent. Use this in
-        SKIP_SCRAPING mode where every millisecond counts.
-
-        Returns:
-            Full Markdown report string, or empty string on failure.
-        """
-        if not self._llm:
-            logger.warning("FeatureExtractorAgent.run_direct_report: no LLM configured.")
-            return ""
-
-        logger.info(f"FeatureExtractorAgent: generating direct report for query='{query}'")
-        system_prompt = """\
+    _DIRECT_REPORT_PROMPT = """\
 You are an expert Azure cloud architect. Using your training knowledge, produce a complete
 Azure cloud feature parity report in Markdown for the user's query.
 
@@ -177,21 +161,47 @@ The report must include:
 Be specific and accurate. Focus on features relevant to the query.
 Return ONLY Markdown — no preamble, no code fences.
 """
-        try:            # Uses gpt-4o-mini — purely a formatting/presentation task, no deep reasoning needed            response = await self._llm.chat.completions.create(
-                model=settings.azure_openai_deployment,
+
+    async def stream_direct_report(self, query: str) -> AsyncIterator[str]:
+        """
+        Stream a parity report chunk-by-chunk using gpt-4o-mini.
+
+        Yields text chunks as soon as they arrive from the LLM so the
+        executor can forward each one to Foundry immediately — keeping the
+        connection alive well within the 30s platform deadline.
+        """
+        if not self._fast_llm:
+            logger.warning("FeatureExtractorAgent.stream_direct_report: no LLM configured.")
+            yield "No LLM configured. Please check AZURE_OPENAI_ENDPOINT."
+            return
+
+        logger.info(f"FeatureExtractorAgent: streaming direct report for query='{query}'")
+        try:
+            stream = await self._fast_llm.chat.completions.create(
+                model=settings.fast_azure_openai_deployment,
                 messages=[
-                    {"role": "system", "content": system_prompt},
+                    {"role": "system", "content": self._DIRECT_REPORT_PROMPT},
                     {"role": "user", "content": query},
                 ],
                 temperature=0.0,
                 max_tokens=2000,
+                stream=True,
             )
-            report_md = response.choices[0].message.content or ""
-            logger.success("FeatureExtractorAgent: direct report generated.")
-            return report_md
+            async for chunk in stream:
+                delta = chunk.choices[0].delta.content if chunk.choices else None
+                if delta:
+                    yield delta
+            logger.success("FeatureExtractorAgent: stream_direct_report complete.")
         except Exception as exc:
-            logger.error(f"FeatureExtractorAgent.run_direct_report failed: {exc}")
-            return ""
+            logger.error(f"FeatureExtractorAgent.stream_direct_report failed: {exc}")
+            yield f"\n\n*Error generating report: {exc}*"
+
+    async def run_direct_report(self, query: str) -> str:
+        """Non-streaming wrapper — used by CLI mode."""
+        chunks: list[str] = []
+        async for chunk in self.stream_direct_report(query):
+            chunks.append(chunk)
+        return "".join(chunks)
 
     # ── LLM extraction ────────────────────────────────────────────────────────
 
