@@ -11,12 +11,50 @@ import json
 import re
 from typing import AsyncIterator, Dict, List, Optional
 
+import asyncio
 import httpx
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from loguru import logger
 from openai import AsyncAzureOpenAI
 
 from config.settings import settings
+
+# -----------------------------------------------------------------
+# Module-level credential singleton
+# Using a single instance across all agents means warm-up in main.py
+# actually primes the token cache used by the OpenAI clients here.
+# -----------------------------------------------------------------
+_AZURE_CREDENTIAL: DefaultAzureCredential | None = None
+
+
+def _get_azure_credential() -> DefaultAzureCredential:
+    """Return the shared DefaultAzureCredential singleton (created on first call)."""
+    global _AZURE_CREDENTIAL
+    if _AZURE_CREDENTIAL is None:
+        _AZURE_CREDENTIAL = DefaultAzureCredential()
+    return _AZURE_CREDENTIAL
+
+
+async def warm_feature_extractor_credential() -> None:
+    """Pre-fetch the managed-identity token so the first OpenAI request is instant.
+
+    Call this once at server startup (before accepting traffic).  The token is
+    cached inside the singleton credential and will be reused by every OpenAI
+    client that was built with _get_azure_credential().
+    """
+    if not settings.azure_openai_endpoint or settings.azure_openai_api_key:
+        logger.info("warm_feature_extractor_credential: key-based auth — no warm-up needed.")
+        return
+    try:
+        cred = _get_azure_credential()
+        # get_token is synchronous — run in thread pool so we don't block the event loop
+        token = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: cred.get_token("https://cognitiveservices.azure.com/.default"),
+        )
+        logger.info(f"warm_feature_extractor_credential: token acquired (expires {token.expires_on}).")
+    except Exception as exc:
+        logger.warning(f"warm_feature_extractor_credential: failed (will retry on first request): {exc}")
 from models.feature import CloudEnvironment, FeatureRecord, FeatureStatus
 from utils.helpers import build_feature_id, parse_status_string
 
@@ -90,8 +128,10 @@ class FeatureExtractorAgent:
             if settings.azure_openai_api_key:
                 client_kwargs["api_key"] = settings.azure_openai_api_key
             else:
+                # Use the module-level singleton so that warm_feature_extractor_credential()
+                # in main.py primes the exact same token cache used here.
                 token_provider = get_bearer_token_provider(
-                    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+                    _get_azure_credential(), "https://cognitiveservices.azure.com/.default"
                 )
                 client_kwargs["azure_ad_token_provider"] = token_provider
             # Hard 20s timeout so a blocked network call fails before Foundry's 30s deadline.

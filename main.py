@@ -83,6 +83,7 @@ async def _warm_credentials() -> None:
 async def _run_server() -> None:
     """Start the HTTP server backed by the parity agent."""
     from azure.ai.agentserver.agentframework import from_agent_framework
+    from agents.feature_extractor import warm_feature_extractor_credential
 
     # Build the workflow ONCE at startup — DefaultAzureCredential init inside
     # FeatureExtractorAgent / ReportGeneratorAgent takes ~600ms each, so
@@ -91,8 +92,12 @@ async def _run_server() -> None:
     # not in the executor instances.
     logger.info("Building parity workflow (one-time startup init)...")
     _workflow = build_parity_workflow()
-    logger.info("Parity workflow ready.  Warming Azure credentials...")
-    await _warm_credentials()
+    # Warm the SAME credential singleton used by both FeatureExtractorAgent and
+    # ReportGeneratorAgent.  This ensures the managed-identity token is already
+    # cached before the first request arrives, so it doesn't eat into the 30s
+    # Foundry deadline.
+    logger.info("Warming Azure credentials (shared with all agents)...")
+    await warm_feature_extractor_credential()
     logger.info("Starting HTTP server...")
     await from_agent_framework(lambda: _workflow).run_async()
 

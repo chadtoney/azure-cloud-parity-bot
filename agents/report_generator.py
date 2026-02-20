@@ -9,10 +9,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from azure.identity import DefaultAzureCredential, get_bearer_token_provider
+from azure.identity import get_bearer_token_provider
 from loguru import logger
 from openai import AsyncAzureOpenAI
 
+from agents.feature_extractor import _get_azure_credential
 from config.settings import settings
 from models.feature import CloudEnvironment, FeatureComparison, ParityReport
 from storage.feature_store import FeatureStore
@@ -43,8 +44,10 @@ class ReportGeneratorAgent:
             if settings.azure_openai_api_key:
                 client_kwargs["api_key"] = settings.azure_openai_api_key
             else:
+                # Share the same credential singleton as FeatureExtractorAgent so that
+                # the single warm-up call in main.py covers all agents.
                 token_provider = get_bearer_token_provider(
-                    DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
+                    _get_azure_credential(), "https://cognitiveservices.azure.com/.default"
                 )
                 client_kwargs["azure_ad_token_provider"] = token_provider
             # Summary is a formatting/prose task — gpt-4o-mini is fast enough
