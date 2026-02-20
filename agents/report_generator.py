@@ -36,22 +36,19 @@ class ReportGeneratorAgent:
         self._store = store or FeatureStore()
         self._llm: Optional[AsyncAzureOpenAI] = None
         if settings.azure_openai_endpoint:
+            client_kwargs: dict = {
+                "azure_endpoint": settings.azure_openai_endpoint,
+                "api_version": settings.azure_openai_api_version,
+            }
             if settings.azure_openai_api_key:
-                self._llm = AsyncAzureOpenAI(
-                    azure_endpoint=settings.azure_openai_endpoint,
-                    api_key=settings.azure_openai_api_key,
-                    api_version=settings.azure_openai_api_version,
-                )
+                client_kwargs["api_key"] = settings.azure_openai_api_key
             else:
-                # Entra ID auth – uses az login / managed identity / workload identity
                 token_provider = get_bearer_token_provider(
                     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
                 )
-                self._llm = AsyncAzureOpenAI(
-                    azure_endpoint=settings.azure_openai_endpoint,
-                    azure_ad_token_provider=token_provider,
-                    api_version=settings.azure_openai_api_version,
-                )
+                client_kwargs["azure_ad_token_provider"] = token_provider
+            # Summary is a formatting/prose task — gpt-4o-mini is fast enough
+            self._llm = AsyncAzureOpenAI(**client_kwargs)
 
     async def run(self, report: ParityReport) -> str:
         """Build the full Markdown report and optionally attach an LLM summary."""
@@ -128,7 +125,7 @@ class ReportGeneratorAgent:
         prompt = f"Total features: {report.total_features}\n\nParity by cloud:\n{stats}"
         try:
             response = await self._llm.chat.completions.create(
-                model=settings.azure_openai_deployment,
+                model=settings.fast_azure_openai_deployment,  # prose summarisation, mini is sufficient
                 messages=[
                     {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
                     {"role": "user", "content": prompt},

@@ -14,8 +14,14 @@ class Settings(BaseSettings):
     # ── Azure OpenAI ──────────────────────────────────────────────────────────
     azure_openai_endpoint: str = Field(default="", description="Azure OpenAI endpoint URL")
     azure_openai_api_key: str = Field(default="", description="Azure OpenAI API key")
-    azure_openai_deployment: str = Field(default="gpt-4o", description="Chat completion deployment name")
+    azure_openai_deployment: str = Field(default="gpt-4o", description="Chat completion deployment name (used for deep reasoning tasks)")
     azure_openai_api_version: str = Field(default="2024-12-01-preview")
+    # Faster / cheaper model for formatting, extraction, and summarisation tasks.
+    # Falls back to azure_openai_deployment if not set.
+    fast_azure_openai_deployment: str = Field(
+        default="gpt-4o-mini",
+        description="Deployment name for speed-sensitive tasks (extraction, direct report, summary)",
+    )
 
     # ── Azure AI Foundry (Agents Service) ────────────────────────────────────
     # Project endpoint format: https://<account>.services.ai.azure.com/api/projects/<project>

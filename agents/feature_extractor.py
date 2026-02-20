@@ -80,23 +80,22 @@ class FeatureExtractorAgent:
 
     def __init__(self) -> None:
         self._llm: Optional[AsyncAzureOpenAI] = None
+        self._fast_llm: Optional[AsyncAzureOpenAI] = None
         if settings.azure_openai_endpoint:
+            client_kwargs: dict = {
+                "azure_endpoint": settings.azure_openai_endpoint,
+                "api_version": settings.azure_openai_api_version,
+            }
             if settings.azure_openai_api_key:
-                self._llm = AsyncAzureOpenAI(
-                    azure_endpoint=settings.azure_openai_endpoint,
-                    api_key=settings.azure_openai_api_key,
-                    api_version=settings.azure_openai_api_version,
-                )
+                client_kwargs["api_key"] = settings.azure_openai_api_key
             else:
-                # Entra ID auth – uses az login / managed identity / workload identity
                 token_provider = get_bearer_token_provider(
                     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
                 )
-                self._llm = AsyncAzureOpenAI(
-                    azure_endpoint=settings.azure_openai_endpoint,
-                    azure_ad_token_provider=token_provider,
-                    api_version=settings.azure_openai_api_version,
-                )
+                client_kwargs["azure_ad_token_provider"] = token_provider
+            self._llm = AsyncAzureOpenAI(**client_kwargs)       # gpt-4o  – deep knowledge tasks
+            self._fast_llm = AsyncAzureOpenAI(**client_kwargs)  # gpt-4o-mini – speed tasks
+            # Both clients share the same auth; model is chosen per call via the deployment name.
 
     async def run(self, pages: Dict[str, str]) -> List[FeatureRecord]:
         """
@@ -131,6 +130,7 @@ class FeatureExtractorAgent:
         logger.info(f"FeatureExtractorAgent: generating records from LLM knowledge for query='{query}'")
         fallback_url = "https://learn.microsoft.com/en-us/azure/azure-government/documentation-government-services"
         try:
+            # Uses the full gpt-4o model — needs deep, accurate Azure cloud knowledge
             response = await self._llm.chat.completions.create(
                 model=settings.azure_openai_deployment,
                 messages=[
@@ -177,8 +177,7 @@ The report must include:
 Be specific and accurate. Focus on features relevant to the query.
 Return ONLY Markdown — no preamble, no code fences.
 """
-        try:
-            response = await self._llm.chat.completions.create(
+        try:            # Uses gpt-4o-mini — purely a formatting/presentation task, no deep reasoning needed            response = await self._llm.chat.completions.create(
                 model=settings.azure_openai_deployment,
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -203,8 +202,8 @@ Return ONLY Markdown — no preamble, no code fences.
         user_message = f"Source URL: {url}\n\nContent:\n{snippet}"
 
         try:
-            response = await self._llm.chat.completions.create(
-                model=settings.azure_openai_deployment,
+            response = await self._fast_llm.chat.completions.create(
+                model=settings.fast_azure_openai_deployment,
                 messages=[
                     {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
                     {"role": "user", "content": user_message},
