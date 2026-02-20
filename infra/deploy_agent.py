@@ -95,25 +95,43 @@ def deploy(image: str) -> None:
     )
     print(f"✅ Agent registered: {agent.name}  version={agent.version}  id={agent.id}")
 
-    print("Starting agent deployment...")
-    import subprocess
+    print("Starting agent deployment (min_replicas=1 to prevent cold starts)...")
+    # Use REST API directly so we can pass min_replicas=1 — the az CLI does not
+    # expose this parameter and defaults to 0 (scale-to-zero), which causes the
+    # container to cold-start on every first request and time out Foundry's 30s
+    # deadline.
+    from azure.identity import DefaultAzureCredential
+    import urllib.request as _req
+    import json as _json
 
-    start_cmd = (
-        f"az cognitiveservices agent start"
-        f" --account-name cloudparitybotproject-resource"
-        f" --project-name cloudparitybotproject"
-        f" --name {AGENT_NAME}"
-        f" --agent-version {agent.version}"
+    base = PROJECT_ENDPOINT.split("/api/projects/")[0]  # https://<resource>.services.ai.azure.com
+    project = PROJECT_ENDPOINT.split("/api/projects/")[1]  # cloudparitybotproject
+    start_url = (
+        f"{base}/api/projects/{project}/agents/{AGENT_NAME}"
+        f"/versions/{agent.version}/containers/default:start"
+        f"?api-version=2025-11-15-preview"
     )
-    result = subprocess.run(start_cmd, shell=True, capture_output=True, text=True)
-    if result.returncode == 0:
-        print("✅ Agent deployment started successfully.")
-        print(result.stdout)
-    else:
-        print("⚠️  az cognitiveservices agent start failed:")
-        print(result.stderr)
-        print("Run manually:")
-        print(f"  {start_cmd}")
+    cred = DefaultAzureCredential()
+    token = cred.get_token("https://ai.azure.com/.default").token
+    body = _json.dumps({"min_replicas": 1}).encode()
+    http_req = _req.Request(
+        start_url,
+        data=body,
+        method="POST",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with _req.urlopen(http_req, timeout=30) as resp_raw:
+            resp_data = _json.loads(resp_raw.read())
+        container = resp_data.get("container", {})
+        print(f"✅ Agent deployment started: status={resp_data.get('status')}  "
+              f"min_replicas={container.get('min_replicas')}  "
+              f"max_replicas={container.get('max_replicas')}")
+    except Exception as exc:
+        print(f"⚠️  Start request failed: {exc}")
+        print(f"Run manually (min_replicas=1 body):")
+        print(f"  POST {start_url}")
+        print(f'  Body: {{"min_replicas": 1}}')
 
 
 if __name__ == "__main__":

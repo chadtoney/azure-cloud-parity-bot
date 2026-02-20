@@ -29,11 +29,12 @@ from agents.workflow import build_parity_agent  # noqa: E402  (build_parity_work
 def _configure_logging() -> None:
     logger.remove()
     # Use stdout so logs appear in the container log stream (Foundry captures stdout).
-    # stderr is not captured by "kind=console" log stream API.
+    # colorize=False: avoid ANSI escape codes that corrupt non-TTY output.
     logger.add(
         sys.stdout,
         level=settings.log_level,
-        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
+        colorize=False,
+        format="{time:HH:mm:ss} | {level: <8} | {message}",
     )
     if settings.log_file:
         import pathlib
@@ -101,19 +102,26 @@ async def _run_server() -> None:
     # build_parity_agent() calls build_parity_workflow().as_agent(), which is
     # exactly what MS Learn recommends passing to from_agent_framework().
     import time as _time
-    logger.info("Building parity agent (one-time startup init)...")
+
+    def _checkpoint(msg: str) -> None:
+        """Write to both streams so we see it regardless of container log capture."""
+        ts = f"[STARTUP {_time.time()-_t0:.2f}s]"
+        line = f"{ts} {msg}\n"
+        sys.stdout.write(line); sys.stdout.flush()
+        sys.stderr.write(line); sys.stderr.flush()
+
     _t0 = _time.time()
+    _checkpoint("build_parity_agent starting")
     _agent = build_parity_agent()
-    print(f"[STARTUP] build_parity_agent done in {_time.time()-_t0:.2f}s", flush=True)
+    _checkpoint(f"build_parity_agent done in {_time.time()-_t0:.2f}s")
     # Warm the credential singleton shared by FeatureExtractorAgent and
     # ReportGeneratorAgent so the managed-identity token is cached before the
     # first request, keeping startup cost off the 30s Foundry deadline.
-    logger.info("Warming Azure credentials (shared with all agents)...")
+    _checkpoint("warming Azure credentials")
     _t1 = _time.time()
     await warm_feature_extractor_credential()
-    print(f"[STARTUP] credential warm-up done in {_time.time()-_t1:.2f}s", flush=True)
-    print(f"[STARTUP] total pre-server init: {_time.time()-_t0:.2f}s", flush=True)
-    logger.info("Starting HTTP server...")
+    _checkpoint(f"credential warm-up done in {_time.time()-_t1:.2f}s")
+    _checkpoint(f"total pre-server init: {_time.time()-_t0:.2f}s — starting uvicorn")
     await from_agent_framework(_agent).run_async()
 
 
