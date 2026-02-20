@@ -3,7 +3,6 @@ agent-framework-azure-ai==1.0.0b260107
 agent-framework-core==1.0.0b260107
 
 # Azure AI Foundry Agents Service (agents visible in ai.azure.com portal)
-azure-ai-agents>=1.0.0
 azure-identity>=1.16.0
 
 # Azure AI Projects SDK – required for hosted agent registration (deploy_agent.py)
@@ -31,6 +30,3 @@ loguru>=0.7.0
 
 # Debugging (VS Code Python Debugger)
 debugpy
-
-# Agent Inspector integration
-agent-dev-cli --pre

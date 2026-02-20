@@ -71,12 +71,21 @@ def deploy(image: str) -> None:
             environment_variables={
                 "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,
                 "AZURE_AI_PROJECT_ENDPOINT": PROJECT_ENDPOINT,  # expected by hosting adapter
-                "AZURE_OPENAI_ENDPOINT": os.getenv("AZURE_OPENAI_ENDPOINT", ""),
+                # Use services.ai.azure.com endpoint – reachable from within Foundry container
+                # networking (cognitiveservices.azure.com may be blocked).
+                "AZURE_OPENAI_ENDPOINT": "https://cloudparitybotproject-resource.services.ai.azure.com/",
                 "AZURE_OPENAI_DEPLOYMENT": MODEL_NAME,
                 "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),
                 "FAST_AZURE_OPENAI_DEPLOYMENT": "gpt-4o-mini",
                 "AGENT_DEBUG_ERRORS": "true",  # expose full errors in responses
                 "SKIP_SCRAPING": "true",  # outbound internet blocked in Foundry container
+                # Required by the Agent Framework to resolve the project resource.
+                "AGENT_PROJECT_RESOURCE_ID": (
+                    "/subscriptions/0cc114af-43d6-4d8f-ba1d-cd863a819339"
+                    "/resourceGroups/Team2"
+                    "/providers/Microsoft.CognitiveServices/accounts"
+                    "/cloudparitybotproject-resource"
+                ),
             },
         ),
     )

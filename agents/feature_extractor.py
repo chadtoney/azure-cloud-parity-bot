@@ -11,6 +11,7 @@ import json
 import re
 from typing import AsyncIterator, Dict, List, Optional
 
+import httpx
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from loguru import logger
 from openai import AsyncAzureOpenAI
@@ -93,6 +94,10 @@ class FeatureExtractorAgent:
                     DefaultAzureCredential(), "https://cognitiveservices.azure.com/.default"
                 )
                 client_kwargs["azure_ad_token_provider"] = token_provider
+            # Hard 25s timeout so a blocked network call fails before Foundry's 30s deadline.
+            client_kwargs["http_client"] = httpx.AsyncClient(
+                timeout=httpx.Timeout(25.0, connect=10.0)
+            )
             self._llm = AsyncAzureOpenAI(**client_kwargs)       # gpt-4o  – deep knowledge tasks
             self._fast_llm = AsyncAzureOpenAI(**client_kwargs)  # gpt-4o-mini – speed tasks
             # Both clients share the same auth; model is chosen per call via the deployment name.
@@ -149,17 +154,17 @@ class FeatureExtractorAgent:
             return []
 
     _DIRECT_REPORT_PROMPT = """\
-You are an expert Azure cloud architect. Using your training knowledge, produce a complete
-Azure cloud feature parity report in Markdown for the user's query.
+You are an expert Azure cloud architect. Using your training knowledge, produce a concise
+Azure cloud feature parity report in Markdown for the user’s query.
 
 The report must include:
-1. A brief executive summary (2-3 sentences)
-2. A Markdown table with columns: Feature | Commercial | GCC | GCC-High | DoD IL2 | DoD IL4 | DoD IL5 | China
-   - Use: GA / Preview / Not Available / Unknown for each cell
-3. Key gaps and recommendations (3-5 bullet points)
+1. A one-sentence executive summary
+2. A Markdown table: Feature | Commercial | GCC | GCC-High | DoD IL2/IL4/IL5 | China
+   - Use: GA / Preview / N/A / Unknown per cell
+   - Limit to 8–12 of the most important features
+3. 3 key gaps/recommendations as bullet points
 
-Be specific and accurate. Focus on features relevant to the query.
-Return ONLY Markdown — no preamble, no code fences.
+Return ONLY Markdown. Be concise — aim for ~600 tokens total.
 """
 
     async def stream_direct_report(self, query: str) -> AsyncIterator[str]:
@@ -184,7 +189,7 @@ Return ONLY Markdown — no preamble, no code fences.
                     {"role": "user", "content": query},
                 ],
                 temperature=0.0,
-                max_tokens=2000,
+                max_tokens=800,   # Keep response short to fit well within 30s
                 stream=True,
             )
             async for chunk in stream:
