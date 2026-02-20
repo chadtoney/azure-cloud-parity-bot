@@ -74,9 +74,12 @@ def deploy(image: str) -> None:
             image=image,
             environment_variables={
                 "AZURE_AI_FOUNDRY_PROJECT_ENDPOINT": PROJECT_ENDPOINT,
-                "AZURE_AI_PROJECT_ENDPOINT": PROJECT_ENDPOINT,  # expected by hosting adapter
-                # Use services.ai.azure.com endpoint – reachable from within Foundry container
-                # networking (cognitiveservices.azure.com may be blocked).
+                # NOTE: do NOT set AZURE_AI_PROJECT_ENDPOINT — the hosting adapter uses that
+                # env var to trigger _setup_tracing_with_azure_ai_client() which creates a
+                # DefaultAzureCredential() and calls get_application_insights_connection_string()
+                # in a background asyncio task.  DefaultAzureCredential probes are SYNCHRONOUS,
+                # so they block the asyncio event loop and delay every request by 90-100 seconds.
+                # Use services.ai.azure.com endpoint – reachable from Foundry container networking.
                 "AZURE_OPENAI_ENDPOINT": "https://cloudparitybotproject-resource.services.ai.azure.com/",
                 "AZURE_OPENAI_DEPLOYMENT": MODEL_NAME,
                 "AZURE_OPENAI_API_VERSION": os.getenv("AZURE_OPENAI_API_VERSION", "2024-12-01-preview"),

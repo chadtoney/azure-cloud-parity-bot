@@ -28,10 +28,25 @@ _AZURE_CREDENTIAL: DefaultAzureCredential | None = None
 
 
 def _get_azure_credential() -> DefaultAzureCredential:
-    """Return the shared DefaultAzureCredential singleton (created on first call)."""
+    """Return the shared credential singleton (created on first call).
+
+    When running inside a Foundry-hosted container (AGENT_PROJECT_RESOURCE_ID is set),
+    we use ManagedIdentityCredential directly to avoid DefaultAzureCredential's slow
+    credential probing (it tries AzureCliCredential, AzurePowerShellCredential, etc.,
+    each with subprocess timeouts of 30s+, causing every LLM request to take 90+ seconds
+    before the token is finally obtained via IMDS/managed identity).
+    """
     global _AZURE_CREDENTIAL
     if _AZURE_CREDENTIAL is None:
-        _AZURE_CREDENTIAL = DefaultAzureCredential()
+        import os
+        if os.getenv("AGENT_PROJECT_RESOURCE_ID"):
+            # Foundry container: go straight to system-assigned managed identity
+            from azure.identity import ManagedIdentityCredential
+            _AZURE_CREDENTIAL = ManagedIdentityCredential()  # type: ignore[assignment]
+            logger.info("_get_azure_credential: using ManagedIdentityCredential (container env)")
+        else:
+            _AZURE_CREDENTIAL = DefaultAzureCredential()
+            logger.info("_get_azure_credential: using DefaultAzureCredential (local env)")
     return _AZURE_CREDENTIAL
 
 
@@ -225,8 +240,18 @@ Return ONLY Markdown. Be concise — aim for ~600 tokens total.
             yield "No LLM configured. Please check AZURE_OPENAI_ENDPOINT."
             return
 
+        import time as _t
+        import sys as _sys
+        _t0 = _t.time()
+        def _diag(msg: str) -> None:
+            line = f"[LLM {_t.time()-_t0:.2f}s] {msg}\n"
+            _sys.stdout.write(line); _sys.stdout.flush()
+            _sys.stderr.write(line); _sys.stderr.flush()
+
+        _diag(f"stream_direct_report start query={query[:60]!r}")
         logger.info(f"FeatureExtractorAgent: streaming direct report for query='{query}'")
         try:
+            _diag("calling fast_llm.chat.completions.create(stream=True)")
             stream = await self._fast_llm.chat.completions.create(
                 model=settings.fast_azure_openai_deployment,
                 messages=[
@@ -237,10 +262,16 @@ Return ONLY Markdown. Be concise — aim for ~600 tokens total.
                 max_tokens=800,   # Keep response short to fit well within 30s
                 stream=True,
             )
+            _diag("stream object received, iterating chunks")
+            chunk_count = 0
             async for chunk in stream:
                 delta = chunk.choices[0].delta.content if chunk.choices else None
                 if delta:
+                    if chunk_count == 0:
+                        _diag(f"first chunk arrived")
+                    chunk_count += 1
                     yield delta
+            _diag(f"stream complete: {chunk_count} chunks")
             logger.success("FeatureExtractorAgent: stream_direct_report complete.")
         except Exception as exc:
             logger.error(f"FeatureExtractorAgent.stream_direct_report failed: {exc}")

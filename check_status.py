@@ -4,7 +4,7 @@ from azure.ai.projects import AIProjectClient
 from azure.ai.projects.models import AgentReference
 from azure.identity import DefaultAzureCredential
 
-AGENT_VERSION = "9"  # update to match the currently deployed version
+AGENT_VERSION = "11"  # update to match the currently deployed version
 PROJECT_ENDPOINT = "https://cloudparitybotproject-resource.services.ai.azure.com/api/projects/cloudparitybotproject"
 client = AIProjectClient(endpoint=PROJECT_ENDPOINT, credential=DefaultAzureCredential())
 
