@@ -1,12 +1,16 @@
 """
 Azure Cloud Feature Parity Bot – main entry point.
 
+Uses Foundry-native agents orchestrated via Agent Framework WorkflowBuilder.
+Each pipeline step is backed by a ChatAgent registered in the Azure AI Foundry
+project and visible in the ai.azure.com portal.
+
 Usage
 -----
-# HTTP server mode (default – used by Agent Inspector & deployment)
+# HTTP server mode (default – for Agent Inspector & Foundry deployment)
 python main.py
 
-# CLI mode (quick ad-hoc run without the HTTP server)
+# CLI mode (quick ad-hoc run)
 python main.py --cli --query "Check Azure Kubernetes Service government parity"
 """
 
@@ -37,7 +41,12 @@ def _configure_logging() -> None:
         import pathlib
 
         pathlib.Path(settings.log_file).parent.mkdir(parents=True, exist_ok=True)
-        logger.add(settings.log_file, level=settings.log_level, rotation="10 MB", retention="7 days")
+        logger.add(
+            settings.log_file,
+            level=settings.log_level,
+            rotation="10 MB",
+            retention="7 days",
+        )
 
 
 async def _run_cli(query: str) -> None:
@@ -61,7 +70,7 @@ async def _run_cli(query: str) -> None:
 
 
 async def _run_server() -> None:
-    """Start the HTTP server backed by the parity agent."""
+    """Start the HTTP server backed by the parity workflow."""
     from azure.ai.agentserver.agentframework import from_agent_framework
 
     # Pass build_parity_workflow as a factory (not a pre-built agent).

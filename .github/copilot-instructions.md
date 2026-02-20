@@ -5,38 +5,33 @@ This is a multi-agent AI system that tracks and compares Azure service feature a
 
 ## Architecture
 - **Multi-agent system** using Python with the **Microsoft Agent Framework** (`agent-framework-azure-ai`, `agent-framework-core`)
-- **Pipeline**: `WorkflowBuilder.add_chain` wires executors: Starter → LearnScraper → WebScraper → FeatureExtractor → Comparison → Report
+- **Foundry-native agents** created via `AzureAIClient` from `agent_framework.azure` — each agent is registered in the Azure AI Foundry project and visible in the ai.azure.com portal
+- **Pipeline**: `WorkflowBuilder.add_chain` wires 5 executors: Starter → Research → Extractor → Comparison → Report
+- **No Docker** — agents are `PromptAgentDefinition` in Foundry (no container timeout issues)
 - **Feature Store**: Persists structured feature parity data as JSON in `data/features/`
-- **Deployment target**: Microsoft Foundry (new) — see Foundry section below
+- **Deployment**: `infra/deploy_agents.py` registers agents as `PromptAgentDefinition` via `AIProjectClient.agents.create_version()`
 
-## Microsoft Foundry: New vs. Classic (Hub-based)
-
-### New Foundry (target for this project)
+## Microsoft Foundry (New)
 - Resource type: **`Microsoft Foundry`** (unified, under `Microsoft.CognitiveServices`)
 - **No Hub, no separate Storage Account or Key Vault required** — much simpler to provision
 - Projects are child resources of the single Foundry resource
 - Project endpoint format: `https://<resource-name>.services.ai.azure.com/api/projects/<project-name>`
 - **Agents are GA** (not preview)
 - Full Foundry SDK & API support, Azure OpenAI-compatible APIs included
-- Only the **default project** is visible in the new Foundry portal (`ai.azure.com` with "New Foundry" toggle on)
-- Create via Azure Portal → "Azure AI Foundry" resource type, or `az cognitiveservices account create --kind AIServices`
-- Set `AZURE_AI_FOUNDRY_PROJECT_ENDPOINT` to the project endpoint from the portal's Home page
+- Set `FOUNDRY_PROJECT_ENDPOINT` to the project endpoint from the portal's Home page
+- Set `FOUNDRY_MODEL_DEPLOYMENT_NAME` to the model deployment name (e.g. `gpt-4o`)
 
-### Classic / Hub-based (do NOT use for new work)
-- Resource type: `Microsoft.MachineLearningServices/workspaces` with `kind: Hub`
-- Requires: Hub + Project + Storage Account + Key Vault (4 resources minimum)
-- Agents are **preview only**
-- Visible in Foundry (classic) portal only
-- The `team2parity-hub` resource in Team2 RG is this type — migrate or delete in favor of new Foundry
-- The new Foundry portal hides hub-based projects entirely
+## Pipeline Executors (agents/executors.py)
+- `StarterExecutor` — Parses user query, seeds pipeline state (no LLM)
+- `ResearchExecutor` — Fetches Azure parity docs via HTTP; Foundry ChatAgent summarises coverage
+- `ExtractorExecutor` — Foundry ChatAgent extracts structured FeatureRecords from docs (or LLM knowledge)
+- `ComparisonExecutor` — Pure Python cross-cloud comparison (no LLM)
+- `ReportExecutor` — Foundry ChatAgent generates executive summary; Python builds Markdown tables
 
-## Agent Roles
-- `orchestrator` - Coordinates all agents, manages workflow
-- `learn_scraper` - Fetches docs from Microsoft Learn via MCP
-- `web_scraper` - Fetches Azure product pages, sovereign cloud docs, Azure Updates blog
-- `feature_extractor` - Parses raw content into structured feature records
-- `comparison_agent` - Compares feature status across clouds, detects changes
-- `report_generator` - Produces human-readable parity reports
+## Foundry Agents (registered in ai.azure.com)
+- `ParityResearchAgent` — Research & summarisation
+- `FeatureExtractorAgent` — Structured data extraction
+- `ParityReportAgent` — Executive report generation
 
 ## Cloud Environments Tracked
 - `commercial` - Azure Public (global)
