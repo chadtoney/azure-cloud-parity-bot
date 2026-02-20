@@ -1,23 +1,30 @@
 """
 Azure Cloud Feature Parity Bot – main entry point.
 
-Uses Foundry-native agents orchestrated via Agent Framework WorkflowBuilder.
-Each pipeline step is backed by a ChatAgent registered in the Azure AI Foundry
-project and visible in the ai.azure.com portal.
+Two execution modes:
+
+1. **Foundry Workflow** (recommended) – invokes the sequential workflow
+   running entirely server-side in Foundry with Web Search + Code Interpreter
+   tools.  See ``run_workflow.py`` for the dedicated client.
+
+2. **Local pipeline** (legacy) – uses Agent Framework WorkflowBuilder to
+   orchestrate Foundry ChatAgents locally.  Useful for development/debugging.
 
 Usage
 -----
-# HTTP server mode (default – for Agent Inspector & Foundry deployment)
-python main.py
+# Invoke the Foundry UI Workflow (recommended)
+python main.py --query "Check Azure Kubernetes Service government parity"
 
-# CLI mode (quick ad-hoc run)
-python main.py --cli --query "Check Azure Kubernetes Service government parity"
+# Legacy: local pipeline via Agent Framework (development only)
+python main.py --local --query "Check AKS parity"
+
+# Legacy: HTTP server mode for Agent Inspector
+python main.py --local --server
 """
 
 from __future__ import annotations
 
 import argparse
-import asyncio
 import sys
 
 from dotenv import load_dotenv
@@ -27,7 +34,6 @@ from loguru import logger
 load_dotenv(override=True)
 
 from config.settings import settings  # noqa: E402 – must be after load_dotenv
-from agents.workflow import build_parity_workflow, build_parity_agent  # noqa: E402
 
 
 def _configure_logging() -> None:
@@ -49,9 +55,18 @@ def _configure_logging() -> None:
         )
 
 
-async def _run_cli(query: str) -> None:
-    """Run the parity pipeline once via CLI and print the Markdown report."""
+def _run_foundry_workflow(query: str) -> None:
+    """Invoke the Foundry portal Sequential Workflow via Responses API."""
+    from run_workflow import run_workflow
+
+    logger.info(f"Invoking Foundry workflow with query: {query!r}")
+    run_workflow(query=query)
+
+
+async def _run_local_cli(query: str) -> None:
+    """Run the local Agent Framework pipeline once (legacy/dev mode)."""
     from agent_framework import ChatMessage, TextContent, Role
+    from agents.workflow import build_parity_agent
 
     agent = build_parity_agent()
     messages = [
@@ -60,7 +75,7 @@ async def _run_cli(query: str) -> None:
             contents=[TextContent(text=query)],
         )
     ]
-    logger.info(f"Running CLI pipeline with query: {query!r}")
+    logger.info(f"Running local CLI pipeline with query: {query!r}")
     response = await agent.run(messages)
     for msg in response.messages:
         if msg.role == Role.ASSISTANT:
@@ -69,38 +84,46 @@ async def _run_cli(query: str) -> None:
                     print(part.text)
 
 
-async def _run_server() -> None:
-    """Start the HTTP server backed by the parity workflow."""
+async def _run_local_server() -> None:
+    """Start the local HTTP server backed by the parity workflow (legacy)."""
     from azure.ai.agentserver.agentframework import from_agent_framework
+    from agents.workflow import build_parity_workflow
 
-    # Pass build_parity_workflow as a factory (not a pre-built agent).
-    # AgentFrameworkWorkflowAdapter._build_agent() calls factory().as_agent()
-    # to create a fresh WorkflowAgent per conversation request.
-    logger.info("Starting Azure Cloud Parity Bot HTTP server...")
+    logger.info("Starting Azure Cloud Parity Bot local HTTP server...")
     await from_agent_framework(build_parity_workflow).run_async()
 
 
 def main() -> None:
+    import asyncio
+
     _configure_logging()
 
     parser = argparse.ArgumentParser(description="Azure Cloud Feature Parity Bot")
     parser.add_argument(
-        "--cli",
-        action="store_true",
-        help="Run once in CLI mode instead of starting the HTTP server.",
-    )
-    parser.add_argument(
         "--query",
         type=str,
-        default="Run full Azure cloud feature parity analysis",
-        help="Query to use in CLI mode.",
+        default="Run full Azure cloud feature parity analysis across all sovereign clouds",
+        help="Query to send to the workflow.",
+    )
+    parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Use local Agent Framework pipeline instead of Foundry workflow.",
+    )
+    parser.add_argument(
+        "--server",
+        action="store_true",
+        help="Start local HTTP server (only with --local).",
     )
     args = parser.parse_args()
 
-    if args.cli:
-        asyncio.run(_run_cli(args.query))
+    if args.local:
+        if args.server:
+            asyncio.run(_run_local_server())
+        else:
+            asyncio.run(_run_local_cli(args.query))
     else:
-        asyncio.run(_run_server())
+        _run_foundry_workflow(args.query)
 
 
 if __name__ == "__main__":
