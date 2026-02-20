@@ -49,10 +49,12 @@ Currently `infra/deploy_agent.py` sets `AGENT_PROJECT_RESOURCE_ID` and other con
 3. Add a Key Vault connection in the Foundry portal (Project → Settings → Connections)
 4. Reference secrets via the connection in `deploy_agent.py`
 
-### Priority 4 — Enable Prompt Shields / Content Filtering
-The bot accepts arbitrary user queries that are forwarded to the LLM with no input validation. This creates prompt injection risk. Enable in the Foundry portal:
-- **Model deployment → Content filters**: block harmful categories on both input and output
-- **Prompt Shields**: detects jailbreak attempts and indirect injection from scraped web content (the web scraper output feeds directly into the LLM)
+### Priority 4 — Verify Prompt Shields coverage (content filtering partially in place)
+`Microsoft.DefaultV2` content filter policy is already applied to both `gpt-4o` and `gpt-4o-mini` deployments — harmful category filtering on input and output is covered.
+
+**Remaining gap — indirect prompt injection**: The web scraper feeds raw HTML/text from third-party pages directly into the LLM context. `Microsoft.DefaultV2` filters harmful *outputs* but doesn't detect injected instructions embedded in scraped content (e.g. a malicious Azure docs page containing `"Ignore previous instructions..."`).
+
+To close this: enable **Prompt Shields for indirect attacks** (also called groundedness / indirect injection detection) on the model deployment in the Foundry portal — this is a separate toggle from the default content filter.
 
 ### Priority 5 — Private networking (future)
 Microsoft has a "Standard Setup with private networking" Bicep template that puts the entire agent behind a VNet with private endpoints for Foundry, AI Search, Storage, and Cosmos DB — no public egress. **Current limitation**: hosted agents (new Foundry) don't support this yet (preview restriction). Track for GA.
@@ -71,6 +73,7 @@ az security pricing create --name CloudPosture --tier Standard
 | RBAC scoped to least privilege | ✅ |
 | No secrets in container image | ✅ |
 | `PYTHONUNBUFFERED=1` — no sensitive data buffered | ✅ |
+| Content filtering (Microsoft.DefaultV2) on gpt-4o + gpt-4o-mini | ✅ |
 
 ---
 
@@ -110,8 +113,8 @@ Security
 □ ACR: disable anonymous pull, downgrade to Basic tier
 □ AI Services: public network access → Disabled + private endpoint
 □ Key Vault: move AGENT_PROJECT_RESOURCE_ID and config out of env vars
-□ Prompt Shields: enable on model deployment in Foundry portal
-□ Content filtering: enable on both input and output
+□ Prompt Shields (indirect injection): enable on model deployment in Foundry portal
+□ Content filtering: ✅ Microsoft.DefaultV2 already applied to gpt-4o + gpt-4o-mini
 □ Defender for Cloud: enable CSPM plan on subscription
 
 Cost
