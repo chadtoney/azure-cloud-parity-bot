@@ -236,6 +236,9 @@ class FeatureExtractorExecutor(Executor):
         if settings.skip_scraping:
             # Streaming fast path: emit each LLM chunk as it arrives.
             # First token reaches Foundry in ~1s — well within the 30s deadline.
+            import time as _time
+            _treq = _time.time()
+            print(f"[REQUEST] FeatureExtractorExecutor.skip_scraping path start", flush=True)
             response_id = str(uuid4())
             await ctx.add_event(
                 AgentRunUpdateEvent(
@@ -248,7 +251,12 @@ class FeatureExtractorExecutor(Executor):
                 )
             )
             full_report: list[str] = []
+            print(f"[REQUEST] starting LLM stream call", flush=True)
+            _tfirst = None
             async for chunk in self._agent.stream_direct_report(query):
+                if _tfirst is None:
+                    _tfirst = _time.time()
+                    print(f"[REQUEST] first LLM chunk in {_tfirst-_treq:.2f}s", flush=True)
                 full_report.append(chunk)
                 await ctx.add_event(
                     AgentRunUpdateEvent(
@@ -260,6 +268,7 @@ class FeatureExtractorExecutor(Executor):
                         ),
                     )
                 )
+            print(f"[REQUEST] LLM stream complete in {_time.time()-_treq:.2f}s total", flush=True)
             await ctx.set_shared_state(KEY_MARKDOWN, "".join(full_report))
             await ctx.set_shared_state(KEY_FEATURE_RECORDS, [])
             logger.success("FeatureExtractorExecutor: streamed direct report complete.")
