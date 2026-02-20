@@ -1,0 +1,19 @@
+# Minimal diagnostic image — no agent framework, no heavy deps.
+# Only needs azure-identity and httpx to run the credential/network checks.
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# Only the packages we actually need
+RUN pip install --no-cache-dir \
+    azure-identity>=1.16.0 \
+    httpx>=0.27.0
+
+COPY diag_server.py .
+
+EXPOSE 8088
+
+CMD ["python", "diag_server.py"]
